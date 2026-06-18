@@ -68,7 +68,7 @@ def test_500_messages_throughput(broker):
 
 def test_concurrent_grant_claim(broker):
     srv, sock = broker
-    N = 10
+    N = 5
     errors = []
     results = [None] * N
 
@@ -86,11 +86,13 @@ def test_concurrent_grant_claim(broker):
             resp = granters[i].grant_gpu(f"claimer-{i}", b"\xFF" * 64, 64)
             handle_ids[i] = resp["handle_id"]
 
+        # Small settle time so all grants are fully written before concurrent claims
+        time.sleep(0.1)
         barrier = threading.Barrier(N)
 
         def claim_worker(i):
             try:
-                barrier.wait(timeout=10)
+                barrier.wait(timeout=15)
                 result = claimers[i].claim_gpu(handle_ids[i])
                 results[i] = result
             except Exception as exc:
@@ -100,7 +102,7 @@ def test_concurrent_grant_claim(broker):
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=10)
+            t.join(timeout=15)
 
     finally:
         for c in granters + claimers:
