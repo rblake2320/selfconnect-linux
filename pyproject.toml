@@ -49,3 +49,15 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+# Hardware-gated modules (CUDA, X11, NCCL, Docker, AT-SPI) are omitted from
+# coverage reporting because their tests require physical hardware not present
+# on CI runners. They are exercised on DGX Spark hardware locally.
+omit = [
+    "self_connect_linux/cuda_ipc.py",
+    "self_connect_linux/nccl.py",
+    "self_connect_linux/x11_input.py",
+    "self_connect_linux/at_spi.py",
+    "self_connect_linux/container.py",
+]
