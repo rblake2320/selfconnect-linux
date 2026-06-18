@@ -214,11 +214,10 @@ class BrowserSession:
             [
                 exe,
                 "--headless=new",
+                "--ozone-platform=headless",
                 f"--remote-debugging-port={self._cdp_port}",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-software-rasterizer",
                 f"--user-data-dir={self._tmpdir}",
             ] + self._extra_args,
             stdout=subprocess.DEVNULL,
