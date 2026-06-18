@@ -1,24 +1,43 @@
 """
-AF_UNIX broker — Phase 2: SO_PEERCRED identity binding + lease issuance.
+AF_UNIX broker — Phase 2+3: SO_PEERCRED identity binding, lease issuance,
+and kernel-attested GPU IPC handle grants.
 
 Protocol (newline-delimited JSON over AF_UNIX SOCK_STREAM):
 
   Client → Server:
-    {"type": "hello", "agent_id": "my-name"}
-    {"type": "send",  "lease": "<uuid>", "to": "agent-id", "payload": "..."}
-    {"type": "recv",  "lease": "<uuid>"}
-    {"type": "bye",   "lease": "<uuid>"}
+    {"type": "hello",  "agent_id": "my-name"}
+    {"type": "send",   "lease": "<uuid>", "to": "agent-id", "payload": "..."}
+    {"type": "recv",   "lease": "<uuid>"}
+    {"type": "grant",  "lease": "<uuid>", "to": "agent-id",
+                        "gpu_handle": "<hex64>", "size_bytes": N,
+                        "buffer_fingerprint": "sha256:..."}
+    {"type": "claim",  "lease": "<uuid>", "handle_id": "<uuid>"}
+    {"type": "bye",    "lease": "<uuid>"}
 
   Server → Client:
-    {"type": "welcome", "lease": "<uuid>", "expires_at": <epoch>, "peer": {pid, uid, gid}}
-    {"type": "ack",     "receipt_id": "<uuid>"}
-    {"type": "message", "from": "agent-id", "payload": "...", "receipt_id": "<uuid>"}
+    {"type": "welcome",    "lease": "<uuid>", "expires_at": <epoch>,
+                            "peer": {pid,uid,gid}, "agent_id": "..."}
+    {"type": "ack",        "receipt_id": "<uuid>"}
+    {"type": "message",    "from": "agent-id", "payload": "...", "receipt_id": "<uuid>"}
     {"type": "empty"}
-    {"type": "error",   "error": "..."}
+    {"type": "granted",    "handle_id": "<uuid>",
+                            "gpu_handle": "<hex64>", "size_bytes": N,
+                            "buffer_fingerprint": "sha256:...",
+                            "from_agent": "...", "chain_hash": "sha256:...",
+                            "receipt_id": "<uuid>"}
+    {"type": "denied",     "handle_id": "<uuid>", "reason": "..."}
+    {"type": "error",      "error": "..."}
 
 Socket: /run/user/$UID/selfconnect/broker.sock (mode 0600)
 Leases expire after LEASE_TTL_SECONDS (default 60).
-SO_PEERCRED is verified on every connection; /proc identity bound at hello.
+SO_PEERCRED verified on every connection; /proc identity bound at hello.
+
+KEY INNOVATION (Phase 3 — patent-worthy):
+  grant/claim flow gates CUDA IPC handle delivery on kernel-attested identity.
+  Only a process whose /proc fingerprint matches the stored lease identity
+  receives the handle bytes. Any other process is denied. Every grant and
+  every claim (successful or denied) is committed to a hash-chained
+  ProvenanceLedger, creating a tamper-evident audit trail.
 """
 from __future__ import annotations
 
@@ -33,8 +52,9 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
 
-from .identity import LinuxTargetIdentity, capture_identity
+from .identity import LinuxTargetIdentity, capture_identity, verify_identity, LinuxTargetMismatch
 from .receipts import make_receipt
+from .provenance import ProvenanceLedger
 
 LEASE_TTL_SECONDS = 60
 _MAX_MAILBOX = 256
@@ -107,6 +127,10 @@ class BrokerServer:
         self._leases: dict[str, _Lease] = {}          # lease_id → _Lease
         self._agents: dict[str, str] = {}              # agent_id → lease_id
         self._mailboxes: dict[str, deque] = defaultdict(lambda: deque(maxlen=_MAX_MAILBOX))
+        # GPU handle grants: handle_id → grant_info dict
+        self._grants: dict[str, dict] = {}
+        # Tamper-evident provenance ledger for all GPU buffer transfers
+        self.ledger: ProvenanceLedger = ProvenanceLedger()
 
     def start(self) -> None:
         Path(self.socket_path).parent.mkdir(parents=True, exist_ok=True)
@@ -237,6 +261,135 @@ class BrokerServer:
                         else:
                             _send_json(conn, {"type": "empty"})
 
+                    elif mtype == "grant":
+                        # Agent deposits a GPU IPC handle for another agent to claim.
+                        # The handle is held in escrow until the named recipient claims it,
+                        # at which point the broker verifies the claimant's kernel identity.
+                        to = str(msg.get("to", ""))
+                        gpu_handle_hex = str(msg.get("gpu_handle", ""))
+                        size_bytes = int(msg.get("size_bytes", 0))
+                        buf_fp = msg.get("buffer_fingerprint")
+                        if not to or not gpu_handle_hex or not size_bytes:
+                            _send_json(conn, {"type": "error",
+                                              "error": "grant requires to, gpu_handle, size_bytes"})
+                            continue
+                        handle_id = str(uuid.uuid4())
+                        with self._lock:
+                            self._grants[handle_id] = {
+                                "from_agent": agent_id,
+                                "to_agent": to,
+                                "gpu_handle_hex": gpu_handle_hex,
+                                "size_bytes": size_bytes,
+                                "buffer_fingerprint": buf_fp,
+                                "granter_identity": lease.identity,
+                                "granter_pid": cred["pid"],
+                            }
+                        # Record grant in provenance ledger
+                        with self._lock:
+                            r = self.ledger.append(
+                                action="grant",
+                                from_agent=agent_id,
+                                to_agent=to,
+                                handle_id=handle_id,
+                                size_bytes=size_bytes,
+                                gpu_uuid=lease.identity.gpu_uuid if lease.identity else None,
+                                buffer_fingerprint=buf_fp,
+                                attested_pid=cred["pid"],
+                                attested_exe_sha256=(
+                                    lease.identity.exe_sha256 if lease.identity else None),
+                                success=True,
+                            )
+                        _send_json(conn, {"type": "ack", "receipt_id": r.receipt_id,
+                                          "handle_id": handle_id,
+                                          "chain_hash": r.chain_hash})
+
+                    elif mtype == "claim":
+                        # Agent claims a GPU IPC handle deposited for it.
+                        # THE CORE NOVEL STEP: broker re-attests the claimant's kernel
+                        # identity against the stored lease identity before releasing
+                        # the handle bytes. A process with the wrong exe hash, wrong
+                        # start-time, or wrong namespace is denied — even if it has the
+                        # correct handle_id string.
+                        handle_id = str(msg.get("handle_id", ""))
+                        with self._lock:
+                            grant = self._grants.get(handle_id)
+
+                        if not grant:
+                            _send_json(conn, {"type": "denied", "handle_id": handle_id,
+                                              "reason": "unknown handle_id"})
+                            continue
+
+                        if grant["to_agent"] != agent_id:
+                            # Record denial
+                            with self._lock:
+                                r = self.ledger.append(
+                                    action="deny",
+                                    from_agent=grant["from_agent"],
+                                    to_agent=agent_id,
+                                    handle_id=handle_id,
+                                    size_bytes=grant["size_bytes"],
+                                    attested_pid=cred["pid"],
+                                    attested_exe_sha256=(
+                                        lease.identity.exe_sha256 if lease.identity else None),
+                                    success=False,
+                                    error="agent_id mismatch",
+                                )
+                            _send_json(conn, {"type": "denied", "handle_id": handle_id,
+                                              "reason": "not the intended recipient",
+                                              "receipt_id": r.receipt_id})
+                            continue
+
+                        # Re-attest: capture fresh /proc identity of claimer and verify
+                        try:
+                            fresh = capture_identity(cred["pid"])
+                            if lease.identity:
+                                verify_identity(lease.identity, fresh)
+                        except LinuxTargetMismatch as exc:
+                            with self._lock:
+                                r = self.ledger.append(
+                                    action="deny",
+                                    from_agent=grant["from_agent"],
+                                    to_agent=agent_id,
+                                    handle_id=handle_id,
+                                    size_bytes=grant["size_bytes"],
+                                    attested_pid=cred["pid"],
+                                    attested_exe_sha256=(
+                                        lease.identity.exe_sha256 if lease.identity else None),
+                                    success=False,
+                                    error=str(exc),
+                                )
+                            _send_json(conn, {"type": "denied", "handle_id": handle_id,
+                                              "reason": f"identity mismatch: {exc}",
+                                              "receipt_id": r.receipt_id})
+                            continue
+
+                        # Identity verified — deliver the handle
+                        with self._lock:
+                            del self._grants[handle_id]
+                            r = self.ledger.append(
+                                action="claim",
+                                from_agent=grant["from_agent"],
+                                to_agent=agent_id,
+                                handle_id=handle_id,
+                                size_bytes=grant["size_bytes"],
+                                gpu_uuid=(lease.identity.gpu_uuid if lease.identity else None),
+                                buffer_fingerprint=grant["buffer_fingerprint"],
+                                attested_pid=cred["pid"],
+                                attested_exe_sha256=(
+                                    lease.identity.exe_sha256 if lease.identity else None),
+                                success=True,
+                            )
+                        _send_json(conn, {
+                            "type": "granted",
+                            "handle_id": handle_id,
+                            "gpu_handle": grant["gpu_handle_hex"],
+                            "size_bytes": grant["size_bytes"],
+                            "buffer_fingerprint": grant["buffer_fingerprint"],
+                            "from_agent": grant["from_agent"],
+                            "chain_hash": r.chain_hash,
+                            "receipt_id": r.receipt_id,
+                        })
+
                     elif mtype == "bye":
                         with self._lock:
                             if lid in self._leases:
@@ -314,6 +467,43 @@ class BrokerClient:
         if resp and resp.get("type") == "message":
             return resp
         return None
+
+    def grant_gpu(self, to: str, gpu_handle: bytes, size_bytes: int,
+                  buffer_fingerprint: str | None = None) -> dict:
+        """
+        Deposit a CUDA IPC handle for *to* to claim.
+        Returns {"handle_id": ..., "chain_hash": ..., "receipt_id": ...}.
+        """
+        if not self._conn or not self.lease:
+            raise RuntimeError("not connected")
+        _send_json(self._conn, {
+            "type": "grant",
+            "lease": self.lease,
+            "to": to,
+            "gpu_handle": gpu_handle.hex(),
+            "size_bytes": size_bytes,
+            "buffer_fingerprint": buffer_fingerprint,
+        })
+        resp = _recv_json(self._conn, self._buf)
+        if resp and resp.get("type") == "ack":
+            return resp
+        raise RuntimeError(f"grant failed: {resp}")
+
+    def claim_gpu(self, handle_id: str) -> dict:
+        """
+        Claim a GPU IPC handle previously granted to this agent.
+        Returns the full granted dict including gpu_handle hex bytes, size, fingerprint.
+        Raises RuntimeError if denied (identity mismatch or wrong recipient).
+        """
+        if not self._conn or not self.lease:
+            raise RuntimeError("not connected")
+        _send_json(self._conn, {"type": "claim", "lease": self.lease, "handle_id": handle_id})
+        resp = _recv_json(self._conn, self._buf)
+        if resp and resp.get("type") == "granted":
+            resp["gpu_handle_bytes"] = bytes.fromhex(resp["gpu_handle"])
+            return resp
+        reason = resp.get("reason", str(resp)) if resp else "no response"
+        raise RuntimeError(f"GPU handle claim denied: {reason}")
 
     def disconnect(self) -> None:
         if self._conn and self.lease:

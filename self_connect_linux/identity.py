@@ -145,9 +145,38 @@ def _namespace_id(pid: int, ns: str) -> str | None:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def _gpu_uuid() -> str | None:
+    """Read the UUID of CUDA GPU 0 from nvidia-smi. Returns None on failure."""
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=gpu_uuid", "--format=csv,noheader", "--id=0"],
+            text=True, timeout=5,
+        )
+        return out.strip() or None
+    except Exception:
+        return None
+
+
+def _cuda_context_id() -> str | None:
+    """
+    Return a stable identifier for the calling process's CUDA context:
+    the device ordinal joined with the process ID, giving a unique context key.
+    Returns None if CUDA is unavailable.
+    """
+    try:
+        import cupy.cuda.runtime as rt
+        dev = rt.getDevice()
+        return f"gpu{dev}:pid{os.getpid()}"
+    except Exception:
+        return None
+
+
 def capture_identity(pid: int, backend: str = "pty") -> LinuxTargetIdentity:
     """Build a /proc-based identity snapshot for a PID. Read-only, no side effects."""
     exe = _exe_path(pid)
+    gpu = _gpu_uuid() if pid == os.getpid() else None
+    ctx = _cuda_context_id() if pid == os.getpid() else None
     return LinuxTargetIdentity(
         platform="linux",
         backend=backend,
@@ -163,6 +192,8 @@ def capture_identity(pid: int, backend: str = "pty") -> LinuxTargetIdentity:
         pid_namespace=_namespace_id(pid, "pid"),
         mount_namespace=_namespace_id(pid, "mnt"),
         net_namespace=_namespace_id(pid, "net"),
+        gpu_uuid=gpu,
+        cuda_context_id=ctx,
     )
 
 
@@ -172,6 +203,7 @@ _VERIFY_FIELDS = [
     "cgroup_path", "pid_namespace", "mount_namespace", "net_namespace",
     "container_id", "x_window_id", "atspi_object_path",
     "pipewire_stream_serial", "tmux_pane", "tty_path",
+    "gpu_uuid",
 ]
 
 

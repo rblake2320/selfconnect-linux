@@ -40,6 +40,32 @@ def has_nvidia_ctk() -> bool:
     return shutil.which("nvidia-ctk") is not None
 
 
+def has_cuda() -> bool:
+    """True if a CUDA GPU is present and cupy can address it."""
+    try:
+        import cupy  # noqa: F401
+        import cupy.cuda.runtime as rt
+        return rt.getDeviceCount() > 0
+    except Exception:
+        return False
+
+
+def gpu_uuids() -> list[str]:
+    """Return UUIDs of all CUDA-visible GPUs, or [] if none/unavailable."""
+    try:
+        result = shutil.which("nvidia-smi")
+        if not result:
+            return []
+        import subprocess
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=gpu_uuid", "--format=csv,noheader"],
+            text=True, timeout=5,
+        )
+        return [u.strip() for u in out.strip().splitlines() if u.strip()]
+    except Exception:
+        return []
+
+
 def capabilities() -> dict:
     return {
         "pty": has_pty(),
@@ -51,4 +77,5 @@ def capabilities() -> dict:
         "dbus": has_dbus(),
         "docker": has_docker(),
         "nvidia_ctk": has_nvidia_ctk(),
+        "cuda": has_cuda(),
     }
