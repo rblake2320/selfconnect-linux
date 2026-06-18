@@ -186,8 +186,17 @@ class NcclComm:
         """
         import cupy
         import cupy.cuda.nccl as _nccl
+        # cupy 13.x NcclCommunicator expects tuple[int, ...] for commId;
+        # cupy 14.x accepts bytes. Normalize to match the installed version.
+        uid = unique_id
+        try:
+            sample = _nccl.get_unique_id()
+            if isinstance(sample, (tuple, list)) and not isinstance(uid, (tuple, list)):
+                uid = tuple(uid)
+        except Exception:
+            pass
         with cupy.cuda.Device(device):
-            comm = _nccl.NcclCommunicator(world_size, unique_id, rank)
+            comm = _nccl.NcclCommunicator(world_size, uid, rank)
         return cls(comm, rank=rank, world_size=world_size, device=device)
 
     @staticmethod

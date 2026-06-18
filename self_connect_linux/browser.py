@@ -66,8 +66,18 @@ def _find_chromium() -> str | None:
 
 
 def browser_available() -> bool:
-    """True if a Chromium binary is available for SelfConnect to spawn."""
-    return _find_chromium() is not None
+    """True if a Chromium binary is present and responds to --version."""
+    exe = _find_chromium()
+    if not exe:
+        return False
+    try:
+        result = subprocess.run(
+            [exe, "--version"],
+            capture_output=True, timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +217,8 @@ class BrowserSession:
                 f"--remote-debugging-port={self._cdp_port}",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
                 f"--user-data-dir={self._tmpdir}",
             ] + self._extra_args,
             stdout=subprocess.DEVNULL,
