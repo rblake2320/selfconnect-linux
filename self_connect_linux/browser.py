@@ -242,8 +242,18 @@ class BrowserSession:
                     f"http://localhost:{self._cdp_port}/json/list", timeout=2
                 ).read()
                 tabs = json.loads(raw)
-                if tabs and "webSocketDebuggerUrl" in tabs[0]:
-                    url = tabs[0]["webSocketDebuggerUrl"]
+                # Pick the first "page" type target — some Chromium builds (snap,
+                # system extensions) prepend chrome-extension background targets
+                # that are not real browsing tabs.
+                page = next(
+                    (t for t in tabs
+                     if t.get("type") == "page" and "webSocketDebuggerUrl" in t),
+                    None,
+                )
+                if page is None and tabs and "webSocketDebuggerUrl" in tabs[0]:
+                    page = tabs[0]  # fallback: use first tab if no "page" type
+                if page:
+                    url = page["webSocketDebuggerUrl"]
                     return url.replace(f"ws://localhost:{self._cdp_port}", "")
             except Exception:
                 pass
