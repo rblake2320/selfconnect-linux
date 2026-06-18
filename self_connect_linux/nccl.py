@@ -64,9 +64,15 @@ def generate_unique_id() -> bytes:
 
     Only the root rank (rank 0) calls this directly.  All ranks receive it
     via nccl_rank_negotiate(), which coordinates the exchange through the broker.
+
+    Normalizes cupy version differences: cupy 13.x returns tuple[int, ...],
+    cupy 14.x returns bytes — both are converted to bytes here.
     """
     import cupy.cuda.nccl as _nccl
-    return _nccl.get_unique_id()
+    uid = _nccl.get_unique_id()
+    if isinstance(uid, (tuple, list)):
+        return bytes(uid)
+    return uid
 
 
 def _uid_to_b64(uid: bytes) -> str:
