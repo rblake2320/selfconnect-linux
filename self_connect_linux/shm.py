@@ -187,6 +187,8 @@ class MemfdChannel:
         return cls(fd=fd, size=size, owner=True)
 
     def write(self, data: bytes, offset: int = 0) -> int:
+        if self._closed:
+            raise RuntimeError("MemfdChannel is closed")
         if not self._owner:
             raise PermissionError("non-owner cannot write to MemfdChannel")
         if self._sealed:
@@ -207,6 +209,8 @@ class MemfdChannel:
         self._sealed = True
 
     def read(self, length: int | None = None, offset: int = 0) -> bytes:
+        if self._closed:
+            raise RuntimeError("MemfdChannel is closed")
         read_len = (self.size - offset) if length is None else length
         with mmap.mmap(self.fd, self.size, access=mmap.ACCESS_READ) as m:
             m.seek(offset)
@@ -254,13 +258,19 @@ class EventfdChannel:
         return cls(fd=fd, owner=True)
 
     def signal(self, n: int = 1) -> None:
+        if self._closed:
+            raise RuntimeError("EventfdChannel is closed")
         os.write(self.fd, struct.pack("<Q", n))
 
     def wait(self) -> int:
+        if self._closed:
+            raise RuntimeError("EventfdChannel is closed")
         data = os.read(self.fd, 8)
         return struct.unpack("<Q", data)[0]
 
     def poll(self) -> int:
+        if self._closed:
+            raise RuntimeError("EventfdChannel is closed")
         import fcntl
         flags = fcntl.fcntl(self.fd, fcntl.F_GETFL)
         fcntl.fcntl(self.fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)

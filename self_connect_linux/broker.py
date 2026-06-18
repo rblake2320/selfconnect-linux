@@ -47,8 +47,8 @@ def default_socket_path() -> str:
 
 
 def _peer_cred(conn: socket.socket) -> dict[str, int]:
-    raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
-    pid, uid, gid = struct.unpack("3i", raw)
+    raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3I"))
+    pid, uid, gid = struct.unpack("3I", raw)
     return {"pid": pid, "uid": uid, "gid": gid}
 
 
@@ -135,7 +135,7 @@ class BrokerServer:
     def list_agents(self) -> list[str]:
         with self._lock:
             return [
-                lid
+                aid
                 for aid, lid in self._agents.items()
                 if lid in self._leases and self._leases[lid].is_valid()
             ]
@@ -256,7 +256,9 @@ class BrokerServer:
                     with self._lock:
                         if lease.lease_id in self._leases:
                             del self._leases[lease.lease_id]
-                        if lease.agent_id in self._agents:
+                        # Only remove agent_id mapping if it still points to our lease —
+                        # a concurrent re-registration may have already replaced it.
+                        if self._agents.get(lease.agent_id) == lease.lease_id:
                             del self._agents[lease.agent_id]
 
     def __enter__(self):

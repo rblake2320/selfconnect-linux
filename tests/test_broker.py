@@ -152,8 +152,25 @@ def test_list_agents(broker):
     srv, sock = broker
     with BrokerClient("list-test-a", socket_path=sock) as a:
         with BrokerClient("list-test-b", socket_path=sock) as b:
-            # Both connected — leases exist
-            assert len(srv._leases) >= 2
+            time.sleep(0.05)
+            agents = srv.list_agents()
+            # list_agents() must return agent IDs, not lease IDs
+            assert "list-test-a" in agents
+            assert "list-test-b" in agents
+
+
+def test_list_agents_returns_agent_ids_not_lease_ids(broker):
+    """Regression: list_agents() previously returned lease UUIDs instead of agent names."""
+    srv, sock = broker
+    with BrokerClient("named-agent", socket_path=sock) as c:
+        time.sleep(0.05)
+        agents = srv.list_agents()
+        assert "named-agent" in agents
+        # Lease IDs are UUIDs — confirm none of the returned values look like one
+        import re
+        uuid_pat = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+        for entry in agents:
+            assert not uuid_pat.match(entry), f"got lease ID instead of agent ID: {entry}"
 
 
 def test_pts0_pts1_direct_channel(broker):

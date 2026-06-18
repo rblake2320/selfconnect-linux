@@ -165,16 +165,21 @@ def spawn_pty_agent(
     # Non-blocking master for select-based incremental reads
     _set_nonblocking(master_fd)
 
-    proc = subprocess.Popen(
-        cmd,
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
-        close_fds=True,
-        env=env,
-        cwd=cwd,
-        start_new_session=True,  # new session = new process group, no signal leak
-    )
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+            env=env,
+            cwd=cwd,
+            start_new_session=True,  # new session = new process group, no signal leak
+        )
+    except Exception:
+        os.close(slave_fd)
+        os.close(master_fd)
+        raise
     os.close(slave_fd)  # controller only needs the master end
 
     return PtyAgent(

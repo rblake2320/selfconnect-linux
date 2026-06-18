@@ -188,7 +188,6 @@ def verify_identity(expected: LinuxTargetIdentity, observed: LinuxTargetIdentity
         f: {"expected": getattr(expected, f), "observed": getattr(observed, f)}
         for f in _VERIFY_FIELDS
         if getattr(expected, f) is not None
-        and getattr(observed, f) is not None
         and getattr(expected, f) != getattr(observed, f)
     }
     if failures:

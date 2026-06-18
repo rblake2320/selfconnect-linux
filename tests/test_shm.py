@@ -6,8 +6,6 @@ import threading
 
 import pytest
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux only")
-
 from self_connect_linux.shm import (
     MemfdChannel,
     EventfdChannel,
@@ -15,11 +13,6 @@ from self_connect_linux.shm import (
     recv_fds,
     shm_available,
 )
-
-
-# ---------------------------------------------------------------------------
-# Capability guard — skip entire module if kernel doesn't have memfd / eventfd
-# ---------------------------------------------------------------------------
 
 pytestmark = [
     pytest.mark.skipif(sys.platform == "win32", reason="Linux only"),
@@ -96,6 +89,20 @@ def test_memfd_close_is_idempotent():
     ch.close()  # should not raise
 
 
+def test_memfd_write_after_close_raises():
+    ch = MemfdChannel.create(size=64)
+    ch.close()
+    with pytest.raises(RuntimeError):
+        ch.write(b"nope")
+
+
+def test_memfd_read_after_close_raises():
+    ch = MemfdChannel.create(size=64)
+    ch.close()
+    with pytest.raises(RuntimeError):
+        ch.read()
+
+
 # ---------------------------------------------------------------------------
 # EventfdChannel
 # ---------------------------------------------------------------------------
@@ -155,6 +162,27 @@ def test_eventfd_close_is_idempotent():
     sig = EventfdChannel.create()
     sig.close()
     sig.close()
+
+
+def test_eventfd_signal_after_close_raises():
+    sig = EventfdChannel.create()
+    sig.close()
+    with pytest.raises(RuntimeError):
+        sig.signal(1)
+
+
+def test_eventfd_wait_after_close_raises():
+    sig = EventfdChannel.create()
+    sig.close()
+    with pytest.raises(RuntimeError):
+        sig.wait()
+
+
+def test_eventfd_poll_after_close_raises():
+    sig = EventfdChannel.create()
+    sig.close()
+    with pytest.raises(RuntimeError):
+        sig.poll()
 
 
 # ---------------------------------------------------------------------------
