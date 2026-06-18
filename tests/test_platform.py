@@ -30,3 +30,18 @@ def test_all_capability_values_are_bool():
     from self_connect_linux.platform import capabilities
     for key, val in capabilities().items():
         assert isinstance(val, bool), f"{key} should be bool, got {type(val)}"
+
+
+def test_has_cuda_returns_bool():
+    from self_connect_linux.platform import has_cuda
+    assert isinstance(has_cuda(), bool)
+
+
+def test_gpu_uuids_returns_list():
+    from self_connect_linux.platform import gpu_uuids
+    assert isinstance(gpu_uuids(), list)
+
+
+def test_capabilities_has_cuda_key():
+    from self_connect_linux import capabilities
+    assert "cuda" in capabilities()

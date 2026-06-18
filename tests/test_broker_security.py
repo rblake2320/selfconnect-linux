@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from self_connect_linux.broker import BrokerClient, BrokerServer, _MAX_MSG_BYTES
+from self_connect_linux.broker import BrokerClient, BrokerServer, _MAX_MSG_BYTES, LEASE_TTL_SECONDS
 from self_connect_linux.identity import (
     LinuxTargetIdentity,
     LinuxTargetMismatch,
@@ -204,3 +204,117 @@ def test_grant_requires_registered_recipient_for_strong_attestation(broker):
     assert grant.get("expected_claimer_identity") is None, (
         "expected_claimer_identity should be None when recipient not registered at grant time"
     )
+
+
+def test_grant_ttl_expired_cannot_be_claimed(broker):
+    """A grant whose created_at is older than LEASE_TTL_SECONDS must be rejected."""
+    srv, sock = broker
+    with BrokerClient("agent-A", socket_path=sock) as a:
+        with BrokerClient("agent-B", socket_path=sock) as b:
+            grant_resp = a.grant_gpu("agent-B", b"\xCC" * 64, 64)
+            handle_id = grant_resp["handle_id"]
+            # Wind back the grant's created_at to simulate expiry
+            with srv._lock:
+                srv._grants[handle_id]["created_at"] = time.time() - LEASE_TTL_SECONDS - 1
+            # Claim must fail — grant is expired
+            with pytest.raises(RuntimeError):
+                b.claim_gpu(handle_id)
+
+
+def test_concurrent_claim_only_one_succeeds(broker):
+    """Two simultaneous claim attempts on the same handle — exactly one succeeds."""
+    import threading
+    srv, sock = broker
+    with BrokerClient("agent-A", socket_path=sock) as a:
+        grant_resp = a.grant_gpu("agent-B", b"\xDD" * 64, 64)
+        handle_id = grant_resp["handle_id"]
+
+    successes = []
+    failures = []
+
+    def try_claim():
+        with BrokerClient("agent-B", socket_path=sock) as b:
+            try:
+                result = b.claim_gpu(handle_id)
+                successes.append(result)
+            except RuntimeError as e:
+                failures.append(str(e))
+
+    t1 = threading.Thread(target=try_claim)
+    t2 = threading.Thread(target=try_claim)
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert len(successes) == 1, f"Expected exactly 1 success, got {len(successes)}: {successes}"
+    assert len(failures) == 1, f"Expected exactly 1 failure, got {len(failures)}: {failures}"
+
+
+def test_broker_get_stats(broker):
+    """get_stats() returns correct active_agents, pending_grants, and ledger_entries."""
+    srv, sock = broker
+    with BrokerClient("agent-X", socket_path=sock) as a:
+        with BrokerClient("agent-Y", socket_path=sock) as b:
+            a.grant_gpu("agent-Y", b"\xEE" * 64, 64)
+            stats = srv.get_stats()
+            assert stats["active_agents"] == 2, f"Expected 2 active agents: {stats}"
+            assert stats["pending_grants"] == 1, f"Expected 1 pending grant: {stats}"
+            assert stats["ledger_entries"] >= 1, f"Expected >= 1 ledger entry: {stats}"
+
+
+def test_send_to_self(broker):
+    """An agent can send a message to itself and receive it back."""
+    srv, sock = broker
+    with BrokerClient("self-agent", socket_path=sock) as c:
+        c.send("self-agent", "hello-self")
+        msg = c.recv()
+        assert msg is not None, "Expected to receive a message"
+        assert msg["payload"] == "hello-self", f"Payload mismatch: {msg}"
+        assert msg["from"] == "self-agent"
+
+
+def test_malformed_json_closes_connection(broker):
+    """Sending malformed JSON should not crash the broker."""
+    import json as _json
+    srv, sock = broker
+    raw = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    raw.connect(sock)
+    try:
+        # First send a valid hello so the connection is established
+        raw.sendall((_json.dumps({"type": "hello", "agent_id": "malformed-test"}) + "\n").encode())
+        raw.settimeout(2.0)
+        # Read welcome
+        resp_bytes = b""
+        while b"\n" not in resp_bytes:
+            try:
+                chunk = raw.recv(4096)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            resp_bytes += chunk
+        # Now send malformed JSON
+        raw.sendall(b"not valid json\n")
+        raw.settimeout(2.0)
+        response = b""
+        try:
+            while b"\n" not in response:
+                chunk = raw.recv(4096)
+                if not chunk:
+                    break
+                response += chunk
+        except (socket.timeout, OSError):
+            pass  # Connection closed — acceptable
+        # Either an error response or connection close is acceptable
+        if response and b"\n" in response:
+            resp = _json.loads(response.split(b"\n")[0])
+            # Any response type is acceptable — broker should not crash
+    finally:
+        try:
+            raw.close()
+        except OSError:
+            pass
+    # Broker should still be alive and functional
+    time.sleep(0.05)
+    agents = srv.list_agents()  # Must not raise

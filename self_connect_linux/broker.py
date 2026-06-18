@@ -321,6 +321,7 @@ class BrokerServer:
                                 "granter_identity": lease.identity,
                                 "granter_pid": cred["pid"],
                                 "expected_claimer_identity": expected_claimer_identity,
+                                "created_at": time.time(),
                             }
                             # Record grant in provenance ledger (inside same lock to prevent race)
                             r = self.ledger.append(
@@ -349,11 +350,21 @@ class BrokerServer:
                         # correct handle_id string.
                         handle_id = str(msg.get("handle_id", ""))
                         with self._lock:
+                            self._purge_expired_grants()
                             grant = self._grants.get(handle_id)
 
                         if not grant:
                             _send_json(conn, {"type": "denied", "handle_id": handle_id,
                                               "reason": "unknown handle_id"})
+                            continue
+
+                        # Check grant TTL expiry
+                        created_at = grant.get("created_at", 0.0)
+                        if time.time() - created_at > LEASE_TTL_SECONDS:
+                            with self._lock:
+                                self._grants.pop(handle_id, None)
+                            _send_json(conn, {"type": "denied", "handle_id": handle_id,
+                                              "reason": "grant expired"})
                             continue
 
                         if grant["to_agent"] != agent_id:
@@ -403,8 +414,13 @@ class BrokerServer:
                                               "receipt_id": r.receipt_id})
                             continue
 
-                        # Identity verified — deliver the handle
+                        # Identity verified — deliver the handle (pop safely in case concurrent claim beat us)
                         with self._lock:
+                            if handle_id not in self._grants:
+                                # Another concurrent claimer already consumed this handle
+                                _send_json(conn, {"type": "denied", "handle_id": handle_id,
+                                                  "reason": "handle already claimed by concurrent request"})
+                                continue
                             del self._grants[handle_id]
                             r = self.ledger.append(
                                 action="claim",
@@ -453,6 +469,31 @@ class BrokerServer:
                         # a concurrent re-registration may have already replaced it.
                         if self._agents.get(lease.agent_id) == lease.lease_id:
                             del self._agents[lease.agent_id]
+
+    def _purge_expired_grants(self) -> None:
+        """Remove grants older than LEASE_TTL_SECONDS. Must be called with self._lock held."""
+        now = time.time()
+        expired = [hid for hid, g in self._grants.items()
+                   if now - g.get("created_at", now) > LEASE_TTL_SECONDS]
+        for hid in expired:
+            del self._grants[hid]
+
+    def get_stats(self) -> dict:
+        """Return a snapshot of broker state counts."""
+        with self._lock:
+            active_leases = len([lv for lv in self._leases.values() if lv.is_valid()])
+            active_agents = sum(
+                1 for aid, lid in self._agents.items()
+                if lid in self._leases and self._leases[lid].is_valid()
+            )
+            pending_grants = len(self._grants)
+            ledger_entries = len(self.ledger)
+        return {
+            "active_leases": active_leases,
+            "active_agents": active_agents,
+            "pending_grants": pending_grants,
+            "ledger_entries": ledger_entries,
+        }
 
     def __enter__(self):
         self.start()

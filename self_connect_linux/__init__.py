@@ -57,10 +57,17 @@ from .at_spi import (
     activate as at_spi_activate,
     get_focused_text,
 )
+from .provenance import (
+    ProvenanceLedger,
+    ChainedReceipt,
+    make_chained_receipt,
+    ChainBroken,
+    GENESIS_HASH,
+)
 from . import tmux_agent
 from . import at_spi
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __all__ = [
     # Identity
     "LinuxTargetIdentity",
@@ -112,6 +119,12 @@ __all__ = [
     "at_spi_activate",
     "get_focused_text",
     "at_spi",
+    # Provenance — hash-chained ledger with tamper detection
+    "ProvenanceLedger",
+    "ChainedReceipt",
+    "make_chained_receipt",
+    "ChainBroken",
+    "GENESIS_HASH",
     # Optional tmux adapter (check tmux_agent.is_available() before use)
     "tmux_agent",
 ]

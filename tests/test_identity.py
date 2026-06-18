@@ -89,3 +89,34 @@ def test_identity_is_frozen():
     ident = LinuxTargetIdentity(pid=1)
     with pytest.raises((AttributeError, TypeError)):
         ident.pid = 2  # type: ignore[misc]
+
+
+def test_verify_identity_each_field_mismatch():
+    """Each field in _VERIFY_FIELDS is independently enforced — changing any one raises."""
+    from self_connect_linux.identity import (
+        capture_identity, verify_identity, LinuxTargetMismatch, _VERIFY_FIELDS,
+    )
+    import dataclasses
+
+    base = capture_identity(os.getpid())
+
+    # Fields to test: only those that are not None in the base (captured) identity.
+    # We also skip proc_start_time_ticks from the loop since it is a _REQUIRED_FIELD
+    # and None values have different semantics; it is already covered by existing tests.
+    # We test each field by setting it to a clearly-wrong value.
+    nonsense_values = {
+        "pid": 999999999,
+        "uid": 999999999,
+        "exe_sha256": "sha256:" + "f" * 64,
+        "proc_start_time_ticks": 999999999999,
+        "cgroup_path": "/totally/fake/cgroup",
+        "pid_namespace": "9999999999",
+    }
+
+    for field_name, bad_value in nonsense_values.items():
+        # Skip if the field is None in base (verify skips None-expected fields)
+        if getattr(base, field_name) is None:
+            continue
+        modified = dataclasses.replace(base, **{field_name: bad_value})
+        with pytest.raises(LinuxTargetMismatch):
+            verify_identity(modified, base)
