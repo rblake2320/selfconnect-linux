@@ -210,6 +210,10 @@ class BrowserSession:
             raise RuntimeError("No Chromium binary found — check browser_available()")
 
         self._tmpdir = tempfile.mkdtemp(prefix="sc-browser-")
+        # --ozone-platform=headless: Chromium's native headless display abstraction.
+        # No X11/xcb dependency; GPU is NOT disabled (unlike --disable-gpu which was
+        # an earlier workaround — see CHANGELOG v0.9.1 and git commits 59d0701/ba25cec).
+        # Source: Ubuntu bug #1959416, Chromium Ozone docs.
         self._proc = subprocess.Popen(
             [
                 exe,

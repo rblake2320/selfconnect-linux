@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.1] - 2026-06-18
+### Fixed (cross-machine compatibility — found by running test suite on both spark-3cdf and spark-3173)
+- `nccl.py` `generate_unique_id()`: cupy 13.x returns `tuple[int,...]`, cupy 14.x returns `bytes` — normalize to `bytes`
+- `nccl.py` `NcclComm.init()`: inverse — cupy 13.x `NcclCommunicator` expects `tuple` back; probe and convert at init time
+- `test_container.py`: hardcoded assertions `len(gpu_containers()) > 0` with hostname literal `spark-3cdf` failed on any other host — replaced with `pytest.skip()` when no containers present
+- `browser.py` CDP target selection: snap Chromium prepends `chrome-extension://` background targets before real page tabs in `/json/list`; fixed by filtering for `type == "page"` first
+- `browser.py` launch flags: initially added `--disable-gpu --disable-software-rasterizer` as a workaround for snap Chromium xcb/ANGLE failures in SSH sessions. **This was wrong.** After researching Ubuntu bug [#1959416](https://bugs.launchpad.net/bugs/1959416) and Chromium Ozone docs, the correct fix is `--ozone-platform=headless` which uses Chromium's native headless display abstraction (no X11/xcb dependency, GPU not disabled). The `--disable-gpu` commits are preserved in git history at `59d0701` and `ba25cec` for reference.
+
 ## [0.9.0] - 2026-06-18
 ### Added
 - Phase 8: Browser control (`browser.py`) — SelfConnect spawns Chromium as a PTY subprocess, captures `/proc` identity, then drives it via a raw CDP WebSocket built from Python stdlib only. No Playwright. No Selenium. No external framework.
