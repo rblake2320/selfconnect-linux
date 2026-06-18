@@ -146,7 +146,16 @@ def _namespace_id(pid: int, ns: str) -> str | None:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def _gpu_uuid() -> str | None:
-    """Read the UUID of CUDA GPU 0 from nvidia-smi. Returns None on failure."""
+    """Read the UUID of CUDA GPU 0 from nvidia-smi. Returns None on failure.
+
+    Security note: GPU UUID is a hardware property of the device, not of the
+    process. All processes on the same host share the same GPU UUID. Its value
+    in identity verification is: (1) confirms the agent is bound to the same
+    physical GPU as the broker, and (2) would differ on a different machine,
+    blocking cross-host spoofing via network tunnels. On multi-GPU hosts,
+    GPU 0 is used; a future enhancement could track per-process device binding
+    via /proc/<pid>/fdinfo for stronger per-process GPU attestation.
+    """
     try:
         import subprocess
         out = subprocess.check_output(

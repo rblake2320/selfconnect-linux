@@ -45,3 +45,30 @@ def test_gpu_uuids_returns_list():
 def test_capabilities_has_cuda_key():
     from self_connect_linux import capabilities
     assert "cuda" in capabilities()
+
+
+def test_has_cuda_returns_bool():
+    from self_connect_linux.platform import has_cuda
+    assert isinstance(has_cuda(), bool)
+
+
+def test_gpu_uuids_returns_list():
+    from self_connect_linux.platform import gpu_uuids
+    result = gpu_uuids()
+    assert isinstance(result, list)
+    for item in result:
+        assert isinstance(item, str)
+
+
+def test_capabilities_has_cuda_key():
+    from self_connect_linux import capabilities
+    caps = capabilities()
+    assert "cuda" in caps
+    assert isinstance(caps["cuda"], bool)
+
+
+def test_capabilities_has_all_expected_keys():
+    from self_connect_linux import capabilities
+    caps = capabilities()
+    for key in ("pty", "tmux", "memfd_create", "eventfd", "nvidia_ctk", "cuda"):
+        assert key in caps, f"missing key: {key}"

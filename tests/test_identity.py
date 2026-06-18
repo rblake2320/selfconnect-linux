@@ -120,3 +120,47 @@ def test_verify_identity_each_field_mismatch():
         modified = dataclasses.replace(base, **{field_name: bad_value})
         with pytest.raises(LinuxTargetMismatch):
             verify_identity(modified, base)
+
+
+def test_capture_identity_nonexistent_pid_returns_partial():
+    """Capturing a non-existent PID gracefully returns a partial identity (all None fields)."""
+    from self_connect_linux.identity import capture_identity
+    # PID 99999999 almost certainly does not exist
+    ident = capture_identity(99999999)
+    # These /proc fields will be None for a non-existent PID
+    assert ident.pid == 99999999
+    assert ident.exe_path is None
+    assert ident.exe_sha256 is None
+    assert ident.proc_start_time_ticks is None
+
+
+def test_proc_start_time_bad_pid_returns_none():
+    from self_connect_linux.identity import _proc_start_time
+    assert _proc_start_time(99999999) is None
+
+
+def test_exe_path_bad_pid_returns_none():
+    from self_connect_linux.identity import _exe_path
+    assert _exe_path(99999999) is None
+
+
+def test_cgroup_bad_pid_returns_none():
+    from self_connect_linux.identity import _cgroup
+    assert _cgroup(99999999) is None
+
+
+def test_namespace_bad_pid_returns_none():
+    from self_connect_linux.identity import _namespace_id
+    assert _namespace_id(99999999, "pid") is None
+
+
+def test_gpu_uuid_returns_str_or_none():
+    from self_connect_linux.identity import _gpu_uuid
+    result = _gpu_uuid()
+    assert result is None or isinstance(result, str)
+
+
+def test_cuda_context_id_returns_str_or_none():
+    from self_connect_linux.identity import _cuda_context_id
+    result = _cuda_context_id()
+    assert result is None or isinstance(result, str)

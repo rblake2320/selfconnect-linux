@@ -248,3 +248,62 @@ print(data.decode())
 def _repo_root() -> str:
     import pathlib
     return str(pathlib.Path(__file__).parent.parent)
+
+
+# ── Error path coverage (no CUDA needed) ──────────────────────────────────────
+
+def test_cuda_error_has_code():
+    from self_connect_linux.cuda_ipc import CudaError
+    e = CudaError("cudaMalloc", 2)
+    assert e.code == 2
+    assert "cudaMalloc" in str(e)
+    assert "2" in str(e)
+
+
+def test_cuda_ipc_available_returns_bool():
+    result = cuda_ipc_available()
+    assert isinstance(result, bool)
+
+
+def test_device_count_returns_nonneg():
+    assert device_count() >= 0
+
+
+def test_alloc_raises_without_cuda(monkeypatch):
+    """CudaIpcBuffer.alloc() raises RuntimeError when _lib is None."""
+    import self_connect_linux.cuda_ipc as m
+    original = m._lib
+    try:
+        m._lib = None
+        with pytest.raises(RuntimeError, match="not found"):
+            CudaIpcBuffer.alloc(64)
+    finally:
+        m._lib = original
+
+
+def test_from_handle_raises_without_cuda(monkeypatch):
+    """CudaIpcBuffer.from_handle() raises RuntimeError when _lib is None."""
+    import self_connect_linux.cuda_ipc as m
+    original = m._lib
+    try:
+        m._lib = None
+        with pytest.raises(RuntimeError, match="not found"):
+            CudaIpcBuffer.from_handle(b"\x00" * 64, 64)
+    finally:
+        m._lib = original
+
+
+def test_from_handle_wrong_length_raises():
+    with pytest.raises(ValueError, match="64 bytes"):
+        CudaIpcBuffer.from_handle(b"\x00" * 32, 64)
+
+
+def test_check_raises_on_nonzero():
+    from self_connect_linux.cuda_ipc import _check, CudaError
+    with pytest.raises(CudaError):
+        _check("testFn", 1)
+
+
+def test_check_passes_on_zero():
+    from self_connect_linux.cuda_ipc import _check
+    _check("testFn", 0)  # should not raise
