@@ -190,10 +190,12 @@ class BrowserSession:
         cdp_port: int = 19222,
         timeout: float = 30.0,
         extra_args: list[str] | None = None,
+        headless: bool = True,
     ) -> None:
         self._cdp_port = cdp_port
         self._timeout = timeout
         self._extra_args = extra_args or []
+        self._headless = headless
         self._proc: subprocess.Popen | None = None
         self._tmpdir: str | None = None
         self._ws: _CdpSocket | None = None
@@ -214,16 +216,17 @@ class BrowserSession:
         # No X11/xcb dependency; GPU is NOT disabled (unlike --disable-gpu which was
         # an earlier workaround — see CHANGELOG v0.9.1 and git commits 59d0701/ba25cec).
         # Source: Ubuntu bug #1959416, Chromium Ozone docs.
+        flags = [
+            f"--remote-debugging-port={self._cdp_port}",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            f"--user-data-dir={self._tmpdir}",
+        ]
+        if self._headless:
+            flags = ["--headless=new", "--ozone-platform=headless"] + flags
+
         self._proc = subprocess.Popen(
-            [
-                exe,
-                "--headless=new",
-                "--ozone-platform=headless",
-                f"--remote-debugging-port={self._cdp_port}",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                f"--user-data-dir={self._tmpdir}",
-            ] + self._extra_args,
+            [exe] + flags + self._extra_args,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
