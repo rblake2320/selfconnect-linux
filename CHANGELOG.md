@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0] - 2026-06-18
+### Added
+- Phase 6: NCCL coordination layer (`nccl.py`) — rank negotiation via broker, UniqueId exchange, `NcclComm` wrapper for allreduce/broadcast on NVIDIA GB10
+- Phase 7: Container/namespace isolation (`container.py`) — `list_containers()`, `gpu_containers()`, `cgroup_info()`, `container_identity()` with cgroup v2 resource limit reads
+- 30 new tests: `test_nccl.py` (15 NCCL tests including two-rank negotiate) and `test_container.py` (15 container/cgroup tests)
+- `make_chained_receipt` exported from top-level package
+
+### Changed
+- `__version__` bumped to 0.8.0
+- All 8 phases complete: 197 tests pass, 2 skipped (tmux guards)
+
 ## [0.6.0] - 2026-06-18
 ### Security
 - Fixed impostor eviction attack: broker now stores recipient identity at grant time; impostors that evict and re-register are denied because their proc_start_time_ticks differ
