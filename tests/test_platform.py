@@ -1,0 +1,32 @@
+"""Tests for Linux capability detection."""
+import sys
+import pytest
+
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux only")
+
+
+def test_capabilities_returns_dict():
+    from self_connect_linux.platform import capabilities
+    caps = capabilities()
+    assert isinstance(caps, dict)
+    expected_keys = {"pty", "tmux", "memfd_create", "eventfd", "x11", "wayland", "dbus"}
+    assert expected_keys.issubset(caps.keys())
+
+
+def test_has_pty_true_on_linux():
+    from self_connect_linux.platform import has_pty
+    assert has_pty() is True
+
+
+def test_has_memfd_true_on_python313():
+    from self_connect_linux.platform import has_memfd
+    import os
+    # Python 3.13 on Linux always has memfd_create
+    if sys.version_info >= (3, 8):
+        assert has_memfd() == hasattr(os, "memfd_create")
+
+
+def test_all_capability_values_are_bool():
+    from self_connect_linux.platform import capabilities
+    for key, val in capabilities().items():
+        assert isinstance(val, bool), f"{key} should be bool, got {type(val)}"

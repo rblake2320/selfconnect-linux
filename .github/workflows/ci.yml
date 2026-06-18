@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on Linux
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install pytest pytest-cov
+
+      - name: Syntax check
+        run: |
+          python -m py_compile self_connect_linux/__init__.py
+          python -m py_compile self_connect_linux/platform.py
+          python -m py_compile self_connect_linux/identity.py
+          python -m py_compile self_connect_linux/pty_agent.py
+          python -m py_compile self_connect_linux/tmux_agent.py
+          python -m py_compile self_connect_linux/receipts.py
+          python -m py_compile self_connect_linux/broker.py
+
+      - name: Import check
+        run: |
+          python -c "
+          from self_connect_linux import spawn_pty_agent, capabilities, capture_identity
+          from self_connect_linux import LinuxTargetIdentity, LinuxTargetMismatch
+          from self_connect_linux import tmux_agent
+          print('imports OK')
+          print('capabilities:', capabilities())
+          "
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
