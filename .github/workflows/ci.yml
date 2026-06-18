@@ -36,6 +36,8 @@ jobs:
           python -m py_compile self_connect_linux/broker.py
           python -m py_compile self_connect_linux/shm.py
           python -m py_compile self_connect_linux/cuda_ipc.py
+          python -m py_compile self_connect_linux/x11_input.py
+          python -m py_compile self_connect_linux/at_spi.py
 
       - name: Import check
         run: |
