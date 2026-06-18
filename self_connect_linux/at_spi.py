@@ -71,11 +71,13 @@ def node_info(n):
         name = n.get_name() or ''
         role = n.get_role_name() or ''
         try:
-            ti = n.query_text()
-            text = ti.get_text(0, -1) if ti else ''
+            # Atspi.Text.get_text() is the stable API across pygi versions;
+            # node.query_text() is not available in all gi binding releases.
+            n_chars = Atspi.Text.get_character_count(n)
+            text = Atspi.Text.get_text(n, 0, min(n_chars, 2000)) if n_chars > 0 else ''
         except Exception:
             text = ''
-        return {'name': name, 'role': role, 'text': text[:2000]}
+        return {'name': name, 'role': role, 'text': text}
     except Exception:
         return None
 """
