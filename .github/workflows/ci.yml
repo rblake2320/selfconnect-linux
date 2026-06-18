@@ -34,6 +34,7 @@ jobs:
           python -m py_compile self_connect_linux/tmux_agent.py
           python -m py_compile self_connect_linux/receipts.py
           python -m py_compile self_connect_linux/broker.py
+          python -m py_compile self_connect_linux/shm.py
 
       - name: Import check
         run: |
