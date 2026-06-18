@@ -183,14 +183,26 @@ A full shell probe is included in `sc_linux_probe_spark-3cdf_20260617_194300.log
 
 ## Phase roadmap
 
-| Phase | What | When |
+| Phase | What | Status |
 |---|---|---|
 | 0 | Platform split — Linux package, no Win32 imports | Done |
 | 1 | PTY agent lane — spawn/send/read/expect/receipts | Done |
-| 2 | AF_UNIX broker — SO_PEERCRED, /proc leases, registry | Next |
-| 3 | memfd/eventfd/epoll — fast agent-to-agent IPC bus | After Phase 2 |
-| 4 | CUDA IPC + NCCL — DGX GPU data plane | After Phase 3 |
-| 5 | AT-SPI, X11, Wayland portals, PipeWire | After Phase 4 |
+| 2 | AF/UNIX broker — SO_PEERCRED, /proc leases, agent mailbox | Done |
+| 3 | memfd/eventfd — zero-copy IPC bus + FD passing | Done |
+| 4 | CUDA IPC — cross-process GPU buffer sharing | Done |
+| 5 | AT-SPI, X11, Wayland portals, PipeWire | Next |
+
+---
+
+## Built with Claude Code
+
+This library was co-authored by **Claude Sonnet 4.6** via [Claude Code](https://claude.com/claude-code), running live on `spark-3cdf` (NVIDIA GB10 Grace Blackwell).
+
+Two Claude Code sessions (pts/0 and pts/1) ran concurrently on the same DGX Spark host, coordinating work via PTY writes and shared files — using the very primitives this library provides.
+
+Attribution is in every commit: `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
+
+See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the full breakdown.
 
 ---
 
