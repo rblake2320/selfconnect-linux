@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0] - 2026-06-18
+### Added
+- Phase 8: Browser control (`browser.py`) — SelfConnect spawns Chromium as a PTY subprocess, captures `/proc` identity, then drives it via a raw CDP WebSocket built from Python stdlib only. No Playwright. No Selenium. No external framework.
+- `BrowserSession`: `goto()`, `click()`, `fill()`, `press()`, `type_text()`, `get_text()`, `screenshot()`, `evaluate()`, `wait_for()` — every mutation returns an `ActionReceipt`
+- `_CdpSocket`: minimal RFC 6455 WebSocket client over raw `socket.socket` — zero external dependencies
+- `browser_available()` capability gate
+- 18 new tests in `test_browser.py` including real internet navigation to example.com and GitHub API
+
+### Design note
+SelfConnect is aware Playwright exists. The point is SelfConnect does not need it.
+The browser is just another agent process: spawned via subprocess, identity-captured
+via `/proc`, driven via the same local-socket primitives as the rest of the stack.
+
 ## [0.8.0] - 2026-06-18
 ### Added
 - Phase 6: NCCL coordination layer (`nccl.py`) — rank negotiation via broker, UniqueId exchange, `NcclComm` wrapper for allreduce/broadcast on NVIDIA GB10

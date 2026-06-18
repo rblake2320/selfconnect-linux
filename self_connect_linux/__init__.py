@@ -83,13 +83,18 @@ from .nccl import (
     nccl_rank_negotiate,
     NcclComm,
 )
+from .browser import (
+    browser_available,
+    BrowserSession,
+)
 from . import tmux_agent
 from . import at_spi
 from . import provenance
 from . import container
 from . import nccl
+from . import browser
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 __all__ = [
     # Identity
     "LinuxTargetIdentity",
@@ -165,6 +170,10 @@ __all__ = [
     "cgroup_info",
     "container_identity",
     "container",
+    # Phase 8 — Browser control (gated on browser_available())
+    "browser_available",
+    "BrowserSession",
+    "browser",
     # Optional tmux adapter (check tmux_agent.is_available() before use)
     "tmux_agent",
 ]
