@@ -1,6 +1,7 @@
 """Tests for /proc-based Linux identity capture."""
 import os
 import sys
+
 import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux only")
@@ -58,7 +59,11 @@ def test_verify_identity_passes_self():
 
 
 def test_verify_identity_fails_on_pid_mismatch():
-    from self_connect_linux.identity import LinuxTargetIdentity, LinuxTargetMismatch, verify_identity
+    from self_connect_linux.identity import (
+        LinuxTargetIdentity,
+        LinuxTargetMismatch,
+        verify_identity,
+    )
     a = LinuxTargetIdentity(pid=100)
     b = LinuxTargetIdentity(pid=999)
     with pytest.raises(LinuxTargetMismatch):
@@ -67,7 +72,10 @@ def test_verify_identity_fails_on_pid_mismatch():
 
 def test_verify_identity_ignores_none_optional_fields():
     """Optional fields that are None in expected are skipped — don't check what we don't know."""
-    from self_connect_linux.identity import LinuxTargetIdentity, verify_identity, LinuxTargetMismatch
+    from self_connect_linux.identity import (
+        LinuxTargetIdentity,
+        verify_identity,
+    )
     # exe_path=None means "don't check" — observed value irrelevant
     a = LinuxTargetIdentity(pid=100, proc_start_time_ticks=999, exe_path=None)
     b = LinuxTargetIdentity(pid=100, proc_start_time_ticks=999, exe_path="/usr/bin/python3")
@@ -76,7 +84,11 @@ def test_verify_identity_ignores_none_optional_fields():
 
 def test_verify_identity_required_none_fails_closed():
     """proc_start_time_ticks=None in expected must raise — unverifiable anti-spoofing field."""
-    from self_connect_linux.identity import LinuxTargetIdentity, verify_identity, LinuxTargetMismatch
+    from self_connect_linux.identity import (
+        LinuxTargetIdentity,
+        LinuxTargetMismatch,
+        verify_identity,
+    )
     a = LinuxTargetIdentity(pid=100, proc_start_time_ticks=None)
     b = LinuxTargetIdentity(pid=100, proc_start_time_ticks=12345)
     with pytest.raises(LinuxTargetMismatch, match="proc_start_time_ticks"):
@@ -93,10 +105,13 @@ def test_identity_is_frozen():
 
 def test_verify_identity_each_field_mismatch():
     """Each field in _VERIFY_FIELDS is independently enforced — changing any one raises."""
-    from self_connect_linux.identity import (
-        capture_identity, verify_identity, LinuxTargetMismatch, _VERIFY_FIELDS,
-    )
     import dataclasses
+
+    from self_connect_linux.identity import (
+        LinuxTargetMismatch,
+        capture_identity,
+        verify_identity,
+    )
 
     base = capture_identity(os.getpid())
 

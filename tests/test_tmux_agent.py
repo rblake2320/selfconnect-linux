@@ -6,7 +6,9 @@ The core PTY lane does not require tmux — these tests only verify the
 optional adapter layer.
 """
 import sys
+import time
 import uuid
+
 import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux only")
@@ -49,7 +51,7 @@ def test_send_keys_and_capture():
     name = f"sc-test-{uuid.uuid4().hex[:6]}"
     try:
         tmux_agent.new_session(name, cmd="/bin/bash")
-        import time; time.sleep(0.3)
+        time.sleep(0.3)
         tmux_agent.send_keys(name, "echo TMUX_CAPTURE_TEST", enter=True)
         time.sleep(0.5)
         text, receipt = tmux_agent.capture_pane(name)

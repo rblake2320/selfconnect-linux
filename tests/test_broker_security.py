@@ -1,14 +1,13 @@
 """Security-focused broker tests — impostor eviction, identity mismatch, DoS mitigations."""
 import os
 import socket
-import stat
 import subprocess
 import sys
 import time
 
 import pytest
 
-from self_connect_linux.broker import BrokerClient, BrokerServer, _MAX_MSG_BYTES, LEASE_TTL_SECONDS
+from self_connect_linux.broker import LEASE_TTL_SECONDS, BrokerClient, BrokerServer
 from self_connect_linux.identity import (
     LinuxTargetIdentity,
     LinuxTargetMismatch,
@@ -26,7 +25,7 @@ def broker(tmp_path):
 
 def test_socket_permissions_0600(tmp_path):
     sock = str(tmp_path / "broker.sock")
-    with BrokerServer(socket_path=sock) as srv:
+    with BrokerServer(socket_path=sock):
         time.sleep(0.05)
         mode = os.stat(sock).st_mode & 0o777
         assert mode == 0o600, f"Expected 0600, got {oct(mode)}"
@@ -70,7 +69,7 @@ def test_oversized_message_rejected(broker):
             pass  # Connection may be closed mid-send — that's fine
         raw.settimeout(2.0)
         try:
-            data = raw.recv(4096)
+            raw.recv(4096)  # response is intentionally ignored
             # If we get data back, it might be an error response, that's fine too
         except (OSError, socket.timeout):
             pass  # Connection closed — correct behaviour
@@ -87,7 +86,7 @@ def test_oversized_message_rejected(broker):
 
 def test_impostor_eviction_denied(tmp_path):
     sock = str(tmp_path / "broker2.sock")
-    with BrokerServer(socket_path=sock) as srv:
+    with BrokerServer(socket_path=sock) as srv:  # noqa: F841
         time.sleep(0.05)
 
         # Register real agent-B in the current process
@@ -255,7 +254,7 @@ def test_broker_get_stats(broker):
     """get_stats() returns correct active_agents, pending_grants, and ledger_entries."""
     srv, sock = broker
     with BrokerClient("agent-X", socket_path=sock) as a:
-        with BrokerClient("agent-Y", socket_path=sock) as b:
+        with BrokerClient("agent-Y", socket_path=sock):
             a.grant_gpu("agent-Y", b"\xEE" * 64, 64)
             stats = srv.get_stats()
             assert stats["active_agents"] == 2, f"Expected 2 active agents: {stats}"
@@ -308,8 +307,7 @@ def test_malformed_json_closes_connection(broker):
             pass  # Connection closed — acceptable
         # Either an error response or connection close is acceptable
         if response and b"\n" in response:
-            resp = _json.loads(response.split(b"\n")[0])
-            # Any response type is acceptable — broker should not crash
+            _json.loads(response.split(b"\n")[0])  # any response type is acceptable — broker should not crash
     finally:
         try:
             raw.close()
@@ -317,4 +315,4 @@ def test_malformed_json_closes_connection(broker):
             pass
     # Broker should still be alive and functional
     time.sleep(0.05)
-    agents = srv.list_agents()  # Must not raise
+    srv.list_agents()  # must not raise

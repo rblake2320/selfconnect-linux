@@ -52,9 +52,9 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
 
-from .identity import LinuxTargetIdentity, capture_identity, verify_identity, LinuxTargetMismatch
-from .receipts import make_receipt
+from .identity import LinuxTargetIdentity, LinuxTargetMismatch, capture_identity, verify_identity
 from .provenance import ProvenanceLedger
+from .receipts import make_receipt
 
 LEASE_TTL_SECONDS = 60
 _MAX_MAILBOX = 256

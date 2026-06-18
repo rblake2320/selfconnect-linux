@@ -1,6 +1,7 @@
 """Tests for JSON action receipts."""
 import json
 import sys
+
 import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux only")

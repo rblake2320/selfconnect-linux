@@ -1,13 +1,12 @@
 """Tests for the hash-chained provenance ledger (runs without CUDA)."""
 import json
-import time
 
 import pytest
 
 from self_connect_linux.provenance import (
+    GENESIS_HASH,
     ChainBroken,
     ChainedReceipt,
-    GENESIS_HASH,
     ProvenanceLedger,
     make_chained_receipt,
 )
@@ -120,7 +119,7 @@ def test_ledger_verify_detects_tamper_chain_hash():
 def test_ledger_verify_detects_insertion():
     ledger = ProvenanceLedger()
     ledger.append("grant", "a", "b", "h1", 64)
-    r3 = ledger.append("claim", "a", "b", "h1", 64)
+    ledger.append("claim", "a", "b", "h1", 64)
 
     # Insert a fake entry between index 0 and 1
     fake = make_chained_receipt(

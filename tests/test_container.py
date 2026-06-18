@@ -31,7 +31,7 @@ def test_list_containers_has_running_on_dgx():
 
 
 def test_container_info_fields():
-    from self_connect_linux.container import list_containers, ContainerInfo
+    from self_connect_linux.container import ContainerInfo, list_containers
     containers = list_containers()
     if not containers:
         pytest.skip("No containers running")
@@ -81,7 +81,7 @@ def test_gpu_containers_all_have_gpu():
 
 
 def test_cgroup_info_own_process():
-    from self_connect_linux.container import cgroup_info, CgroupInfo
+    from self_connect_linux.container import CgroupInfo, cgroup_info
     info = cgroup_info(os.getpid())
     assert isinstance(info, CgroupInfo)
     assert info.pid == os.getpid()
@@ -117,7 +117,7 @@ def test_cgroup_info_repr():
 
 def test_cgroup_info_container_process():
     """Container's init process should have cgroup limits set."""
-    from self_connect_linux.container import list_containers, cgroup_info
+    from self_connect_linux.container import cgroup_info, list_containers
     containers = [c for c in list_containers() if c.init_pid]
     if not containers:
         pytest.skip("No containers with readable init_pid")
@@ -129,7 +129,7 @@ def test_cgroup_info_container_process():
 
 
 def test_container_identity_running():
-    from self_connect_linux.container import list_containers, container_identity
+    from self_connect_linux.container import container_identity, list_containers
     from self_connect_linux.identity import LinuxTargetIdentity
     containers = [c for c in list_containers() if c.is_running and c.init_pid]
     if not containers:

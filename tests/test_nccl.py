@@ -42,7 +42,7 @@ def test_generate_unique_id_is_unique():
 
 
 def test_uid_roundtrip_base64():
-    from self_connect_linux.nccl import generate_unique_id, _uid_to_b64, _uid_from_b64
+    from self_connect_linux.nccl import _uid_from_b64, _uid_to_b64, generate_unique_id
     uid = generate_unique_id()
     b64 = _uid_to_b64(uid)
     assert isinstance(b64, str)
@@ -51,7 +51,7 @@ def test_uid_roundtrip_base64():
 
 def test_ncclcomm_loopback_world_size_1():
     """NcclComm with world_size=1 is valid loopback mode."""
-    import cupy
+
     from self_connect_linux.nccl import NcclComm, generate_unique_id
     uid = generate_unique_id()
     with NcclComm.init(uid, rank=0, world_size=1, device=0) as comm:
@@ -72,6 +72,7 @@ def test_ncclcomm_close_is_idempotent():
 
 def test_ncclcomm_allreduce_after_close_raises():
     import cupy
+
     from self_connect_linux.nccl import NcclComm, generate_unique_id
     uid = generate_unique_id()
     comm = NcclComm.init(uid, rank=0, world_size=1, device=0)
@@ -84,6 +85,7 @@ def test_ncclcomm_allreduce_after_close_raises():
 def test_ncclcomm_allreduce_loopback():
     """allreduce on a single-rank comm is a no-op — array unchanged."""
     import cupy
+
     from self_connect_linux.nccl import NcclComm, generate_unique_id
     uid = generate_unique_id()
     with NcclComm.init(uid, rank=0, world_size=1, device=0) as comm:
@@ -97,6 +99,7 @@ def test_ncclcomm_allreduce_loopback():
 
 def test_ncclcomm_invalid_op_raises():
     import cupy
+
     from self_connect_linux.nccl import NcclComm, generate_unique_id
     uid = generate_unique_id()
     with NcclComm.init(uid, rank=0, world_size=1, device=0) as comm:
@@ -116,17 +119,18 @@ def test_ncclcomm_repr():
 
 def test_nccl_rank_negotiate_world_size_1():
     """Rank negotiate with world_size=1 — root just returns the ID immediately."""
-    from self_connect_linux.nccl import nccl_rank_negotiate, generate_unique_id
-    import tempfile, os
-    from self_connect_linux import BrokerServer, BrokerClient
-
+    import os
     import shutil
+    import tempfile
+
+    from self_connect_linux import BrokerClient, BrokerServer
+    from self_connect_linux.nccl import nccl_rank_negotiate
     tmpdir = tempfile.mkdtemp()
     sock = os.path.join(tmpdir, "broker.sock")
     try:
         with BrokerServer(socket_path=sock) as _broker:
             time.sleep(0.05)
-            with BrokerClient(f"test-job:rank0", socket_path=sock) as c:
+            with BrokerClient("test-job:rank0", socket_path=sock) as c:
                 uid = nccl_rank_negotiate(c, "test-job", rank=0, world_size=1)
                 assert isinstance(uid, bytes)
                 assert len(uid) == 128
@@ -136,8 +140,11 @@ def test_nccl_rank_negotiate_world_size_1():
 
 def test_nccl_rank_negotiate_two_ranks():
     """Root sends UniqueId to rank 1 via broker; both get the same bytes."""
-    import tempfile, os, shutil
-    from self_connect_linux import BrokerServer, BrokerClient
+    import os
+    import shutil
+    import tempfile
+
+    from self_connect_linux import BrokerClient, BrokerServer
     from self_connect_linux.nccl import nccl_rank_negotiate
 
     tmpdir = tempfile.mkdtemp()
@@ -175,9 +182,12 @@ def test_nccl_rank_negotiate_two_ranks():
 
 
 def test_nccl_rank_negotiate_invalid_rank_raises():
+    import os
+    import shutil
+    import tempfile
+
+    from self_connect_linux import BrokerClient, BrokerServer
     from self_connect_linux.nccl import nccl_rank_negotiate
-    import tempfile, os, shutil
-    from self_connect_linux import BrokerServer, BrokerClient
 
     tmpdir = tempfile.mkdtemp()
     sock = os.path.join(tmpdir, "broker.sock")

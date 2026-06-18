@@ -17,7 +17,6 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 # Lazy import — only bind when actually used
 _display = None
@@ -224,8 +223,8 @@ def _keysym_to_keycode(d, keysym: int) -> int:
 
 
 def _xtest_key(d, keycode: int, press: bool) -> None:
-    from Xlib.ext import xtest
     from Xlib import X
+    from Xlib.ext import xtest
     xtest.fake_input(d, X.KeyPress if press else X.KeyRelease, keycode)
 
 

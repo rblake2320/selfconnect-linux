@@ -19,13 +19,11 @@ dependency required.  cgroup reads go directly to /sys/fs/cgroup (v2 unified).
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from .identity import capture_identity, LinuxTargetIdentity
+from .identity import LinuxTargetIdentity, capture_identity
 
 
 @dataclass

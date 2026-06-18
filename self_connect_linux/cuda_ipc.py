@@ -51,8 +51,6 @@ from __future__ import annotations
 import base64
 import ctypes
 import ctypes.util
-import os
-from typing import Literal
 
 # ---------------------------------------------------------------------------
 # libcudart loading

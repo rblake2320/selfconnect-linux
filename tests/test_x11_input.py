@@ -1,7 +1,5 @@
 """Tests for Phase 5 X11 input and window management (x11_input.py)."""
-import os
 import sys
-import time
 
 import pytest
 
@@ -26,7 +24,7 @@ def test_list_windows_returns_list():
 
 
 def test_window_info_fields():
-    from self_connect_linux.x11_input import list_windows, WindowInfo
+    from self_connect_linux.x11_input import WindowInfo, list_windows
     wins = list_windows()
     w = wins[0]
     assert isinstance(w, WindowInfo)
@@ -71,7 +69,7 @@ def test_send_key_return_no_crash():
 
 def test_send_special_keys_no_crash():
     """Verify all special key names resolve without error."""
-    from self_connect_linux.x11_input import find_window, send_key, _SPECIAL_KEYS
+    from self_connect_linux.x11_input import _SPECIAL_KEYS, find_window, send_key
     win = find_window(wm_class="gnome-terminal")
     if win is None:
         pytest.skip("No gnome-terminal window found")

@@ -52,6 +52,7 @@ import ctypes
 import ctypes.util
 import mmap
 import os
+import platform as _platform
 import socket
 import struct
 from typing import TYPE_CHECKING
@@ -70,7 +71,6 @@ _SYS_memfd_create_x86_64  = 319   # x86_64
 _SYS_eventfd2_aarch64     = 19    # aarch64 (eventfd2)
 _SYS_eventfd2_x86_64      = 290   # x86_64
 
-import platform as _platform
 _machine = _platform.machine().lower()
 if "aarch64" in _machine or "arm64" in _machine:
     _SYS_memfd_create = _SYS_memfd_create_aarch64

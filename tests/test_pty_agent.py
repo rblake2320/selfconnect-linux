@@ -7,6 +7,7 @@ No GUI permissions required. No tmux required.
 import os
 import sys
 import time
+
 import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux only")

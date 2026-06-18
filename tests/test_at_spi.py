@@ -1,5 +1,4 @@
 """Tests for Phase 5 AT-SPI accessibility tree access (at_spi.py)."""
-import os
 import sys
 
 import pytest

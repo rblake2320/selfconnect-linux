@@ -1,5 +1,6 @@
 """Tests for Linux capability detection."""
 import sys
+
 import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux only")
@@ -19,8 +20,9 @@ def test_has_pty_true_on_linux():
 
 
 def test_has_memfd_true_on_python313():
-    from self_connect_linux.platform import has_memfd
     import os
+
+    from self_connect_linux.platform import has_memfd
     # Python 3.13 on Linux always has memfd_create
     if sys.version_info >= (3, 8):
         assert has_memfd() == hasattr(os, "memfd_create")
@@ -30,21 +32,6 @@ def test_all_capability_values_are_bool():
     from self_connect_linux.platform import capabilities
     for key, val in capabilities().items():
         assert isinstance(val, bool), f"{key} should be bool, got {type(val)}"
-
-
-def test_has_cuda_returns_bool():
-    from self_connect_linux.platform import has_cuda
-    assert isinstance(has_cuda(), bool)
-
-
-def test_gpu_uuids_returns_list():
-    from self_connect_linux.platform import gpu_uuids
-    assert isinstance(gpu_uuids(), list)
-
-
-def test_capabilities_has_cuda_key():
-    from self_connect_linux import capabilities
-    assert "cuda" in capabilities()
 
 
 def test_has_cuda_returns_bool():

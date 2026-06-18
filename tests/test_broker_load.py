@@ -117,8 +117,8 @@ def test_concurrent_grant_claim(broker):
 
 def test_broker_handles_client_abrupt_disconnect(broker):
     srv, sock = broker
-    import socket as _socket
     import json
+    import socket as _socket
 
     raw = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
     raw.connect(sock)

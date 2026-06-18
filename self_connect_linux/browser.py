@@ -31,19 +31,18 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
 import socket
 import struct
 import subprocess
 import tempfile
 import time
 import urllib.request
-import shutil
 from pathlib import Path
 from typing import Any
 
 from .identity import LinuxTargetIdentity, capture_identity
 from .receipts import ActionReceipt, make_receipt
-
 
 # ---------------------------------------------------------------------------
 # Browser binary discovery
@@ -459,7 +458,7 @@ class BrowserSession:
         except Exception as exc:
             return make_receipt(
                 action="browser",
-                payload=f"type_text",
+                payload="type_text",
                 backend="browser_cdp",
                 pid=self._proc.pid if self._proc else os.getpid(),
                 success=False,

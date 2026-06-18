@@ -1,12 +1,11 @@
 """Phase 2 broker tests — AF_UNIX, SO_PEERCRED, leases, two-agent messaging."""
 import os
-import tempfile
 import threading
 import time
 
 import pytest
 
-from self_connect_linux.broker import BrokerServer, BrokerClient, LEASE_TTL_SECONDS
+from self_connect_linux.broker import BrokerClient, BrokerServer
 
 
 @pytest.fixture
@@ -142,7 +141,7 @@ def test_concurrent_agents(broker):
 
 def test_server_context_manager(tmp_path):
     sock = str(tmp_path / "ctx.sock")
-    with BrokerServer(socket_path=sock) as srv:
+    with BrokerServer(socket_path=sock):
         time.sleep(0.05)
         assert os.path.exists(sock)
     assert not os.path.exists(sock)
@@ -150,8 +149,8 @@ def test_server_context_manager(tmp_path):
 
 def test_list_agents(broker):
     srv, sock = broker
-    with BrokerClient("list-test-a", socket_path=sock) as a:
-        with BrokerClient("list-test-b", socket_path=sock) as b:
+    with BrokerClient("list-test-a", socket_path=sock):
+        with BrokerClient("list-test-b", socket_path=sock):
             time.sleep(0.05)
             agents = srv.list_agents()
             # list_agents() must return agent IDs, not lease IDs
@@ -162,7 +161,7 @@ def test_list_agents(broker):
 def test_list_agents_returns_agent_ids_not_lease_ids(broker):
     """Regression: list_agents() previously returned lease UUIDs instead of agent names."""
     srv, sock = broker
-    with BrokerClient("named-agent", socket_path=sock) as c:
+    with BrokerClient("named-agent", socket_path=sock):
         time.sleep(0.05)
         agents = srv.list_agents()
         assert "named-agent" in agents

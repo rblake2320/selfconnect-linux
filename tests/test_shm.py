@@ -3,14 +3,15 @@ import os
 import socket
 import sys
 import threading
+import time
 
 import pytest
 
 from self_connect_linux.shm import (
-    MemfdChannel,
     EventfdChannel,
-    send_fds,
+    MemfdChannel,
     recv_fds,
+    send_fds,
     shm_available,
 )
 
@@ -152,7 +153,7 @@ def test_eventfd_threaded_signal_wait():
 
         t = threading.Thread(target=reader, daemon=True)
         t.start()
-        import time; time.sleep(0.02)
+        time.sleep(0.02)
         sig.signal(42)
         t.join(timeout=2.0)
         assert results == [42]

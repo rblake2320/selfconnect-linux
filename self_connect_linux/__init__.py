@@ -21,78 +21,81 @@ if sys.platform == "win32":
         "self_connect_linux is not supported on Windows. Use self_connect.py instead."
     )
 
+from . import at_spi, browser, container, nccl, provenance, tmux_agent
+from .at_spi import (
+    activate as at_spi_activate,
+)
+from .at_spi import (
+    at_spi_available,
+    find_application,
+    get_application_widgets,
+    get_focused_text,
+    list_applications,
+)
+from .at_spi import (
+    get_text as at_spi_get_text,
+)
+from .broker import LEASE_TTL_SECONDS, BrokerClient, BrokerServer, default_socket_path
+from .browser import (
+    BrowserSession,
+    browser_available,
+)
+from .container import (
+    CgroupInfo,
+    ContainerInfo,
+    cgroup_info,
+    container_available,
+    container_identity,
+    gpu_containers,
+    list_containers,
+)
+from .cuda_ipc import (
+    CudaError,
+    CudaIpcBuffer,
+    cuda_ipc_available,
+    device_count,
+    handle_from_b64,
+    handle_to_b64,
+)
 from .identity import (
     LinuxTargetIdentity,
     LinuxTargetMismatch,
     capture_identity,
     verify_identity,
 )
+from .nccl import (
+    NcclComm,
+    generate_unique_id,
+    nccl_available,
+    nccl_rank_negotiate,
+)
+from .nccl import (
+    get_build_version as nccl_build_version,
+)
+from .nccl import (
+    get_runtime_version as nccl_runtime_version,
+)
 from .platform import capabilities
-from .pty_agent import PtyAgent, spawn_pty_agent
-from .receipts import ActionReceipt, make_receipt, receipt_to_json
-from .broker import BrokerServer, BrokerClient, default_socket_path, LEASE_TTL_SECONDS
-from .shm import MemfdChannel, EventfdChannel, send_fds, recv_fds, shm_available
-from .cuda_ipc import (
-    CudaIpcBuffer,
-    CudaError,
-    cuda_ipc_available,
-    device_count,
-    handle_to_b64,
-    handle_from_b64,
-)
-from .x11_input import (
-    x11_available,
-    list_windows,
-    find_window,
-    find_windows,
-    focus_window,
-    send_key,
-    type_text,
-    WindowInfo,
-)
-from .at_spi import (
-    at_spi_available,
-    list_applications,
-    find_application,
-    get_application_widgets,
-    get_text as at_spi_get_text,
-    activate as at_spi_activate,
-    get_focused_text,
-)
 from .provenance import (
+    GENESIS_HASH,
+    ChainBroken,
     ChainedReceipt,
     ProvenanceLedger,
     make_chained_receipt,
-    ChainBroken,
-    GENESIS_HASH,
 )
-from .container import (
-    ContainerInfo,
-    CgroupInfo,
-    container_available,
-    list_containers,
-    gpu_containers,
-    cgroup_info,
-    container_identity,
+from .pty_agent import PtyAgent, spawn_pty_agent
+from .receipts import ActionReceipt, make_receipt, receipt_to_json
+from .shm import EventfdChannel, MemfdChannel, recv_fds, send_fds, shm_available
+from .x11_input import (
+    WindowInfo,
+    find_window,
+    find_windows,
+    focus_window,
+    list_windows,
+    send_key,
+    type_text,
+    x11_available,
 )
-from .nccl import (
-    nccl_available,
-    generate_unique_id,
-    get_build_version as nccl_build_version,
-    get_runtime_version as nccl_runtime_version,
-    nccl_rank_negotiate,
-    NcclComm,
-)
-from .browser import (
-    browser_available,
-    BrowserSession,
-)
-from . import tmux_agent
-from . import at_spi
-from . import provenance
-from . import container
-from . import nccl
-from . import browser
 
 __version__ = "0.9.0"
 __all__ = [

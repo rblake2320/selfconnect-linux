@@ -7,13 +7,12 @@ Numbers from DGX Spark GB10 (Ubuntu 24.04 aarch64):
   broker_send_recv_roundtrip  ~  0.3 ms / op
   broker_grant_claim          ~  5-15 ms / op (includes /proc + nvidia-smi reads)
 """
-import os
 import tempfile
 import time
 
 import pytest
 
-from self_connect_linux.broker import BrokerServer, BrokerClient
+from self_connect_linux.broker import BrokerClient, BrokerServer
 
 
 @pytest.fixture(scope="module")

@@ -5,7 +5,6 @@ These tests require a real internet connection and a Chromium binary.
 They are skipped automatically when browser_available() returns False.
 """
 import json
-import os
 import sys
 
 import pytest

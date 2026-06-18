@@ -20,7 +20,6 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-
 # The genesis hash — the "prev" of the first receipt in any ledger.
 GENESIS_HASH = "sha256:" + "0" * 64
 

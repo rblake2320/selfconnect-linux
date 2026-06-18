@@ -11,13 +11,13 @@ import sys
 import pytest
 
 from self_connect_linux.cuda_ipc import (
-    CudaIpcBuffer,
+    _IPC_HANDLE_SIZE,
     CudaError,
+    CudaIpcBuffer,
     cuda_ipc_available,
     device_count,
     handle_from_b64,
     handle_to_b64,
-    _IPC_HANDLE_SIZE,
 )
 
 pytestmark = [
@@ -253,7 +253,6 @@ def _repo_root() -> str:
 # ── Error path coverage (no CUDA needed) ──────────────────────────────────────
 
 def test_cuda_error_has_code():
-    from self_connect_linux.cuda_ipc import CudaError
     e = CudaError("cudaMalloc", 2)
     assert e.code == 2
     assert "cudaMalloc" in str(e)
@@ -299,7 +298,7 @@ def test_from_handle_wrong_length_raises():
 
 
 def test_check_raises_on_nonzero():
-    from self_connect_linux.cuda_ipc import _check, CudaError
+    from self_connect_linux.cuda_ipc import _check
     with pytest.raises(CudaError):
         _check("testFn", 1)
 

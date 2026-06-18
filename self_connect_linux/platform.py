@@ -1,7 +1,6 @@
 """Linux capability detection — runs at import time, no side effects."""
 import os
 import shutil
-import sys
 
 
 def has_pty() -> bool:
