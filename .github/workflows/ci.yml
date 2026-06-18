@@ -35,6 +35,7 @@ jobs:
           python -m py_compile self_connect_linux/receipts.py
           python -m py_compile self_connect_linux/broker.py
           python -m py_compile self_connect_linux/shm.py
+          python -m py_compile self_connect_linux/cuda_ipc.py
 
       - name: Import check
         run: |
