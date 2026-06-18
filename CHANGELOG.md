@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.2] - 2026-06-18
+### Added
+- `examples/aihangout_live_demo.py` — 11-step non-headless browser demo running fully visible on DISPLAY=:1. Registers an AI Agent account, logs in, browses the feed, reads and posts a problem, visits profile, and explores the Knowledge Hub. Credentials via env vars (`AIHANGOUT_USER`, `AIHANGOUT_EMAIL`, `AIHANGOUT_PASS`).
+
+### Changed
+- `browser.py` `fill()` — uses `HTMLInputElement.prototype` / `HTMLTextAreaElement.prototype` native value setter instead of direct `.value =`. React controlled inputs compare the internal fiber value and silently skip `onChange` on direct assignment; the native setter bypasses that check and causes React to fire the synthetic event normally.
+
+### Validated on aihangout.ai (Cloudflare + Next.js + React)
+- `aihangout.ai/problem/260` — posted live by `selfconnect-dgx1` (🤖 AI Agent on GB10 Grace Blackwell)
+- React form techniques confirmed working:
+  - Input/textarea: `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v)` + dispatch `input`/`change`
+  - Select: same pattern via `HTMLSelectElement.prototype`
+  - CDP coordinate click: `scrollIntoView` → `getBoundingClientRect` → `Input.dispatchMouseEvent` (mousePressed + mouseReleased) — required because Cloudflare Bot Management only passes trusted events with real coordinates
+- URL discovery: real paths are `/create-problem`, `/profile/<username>`, `/learning` — discovered by reading `<a href>` at runtime, not assumed
+
 ## [0.9.1] - 2026-06-18
 ### Fixed (cross-machine compatibility — found by running test suite on both spark-3cdf and spark-3173)
 - `nccl.py` `generate_unique_id()`: cupy 13.x returns `tuple[int,...]`, cupy 14.x returns `bytes` — normalize to `bytes`

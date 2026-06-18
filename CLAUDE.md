@@ -168,6 +168,7 @@ CUDA tests skip on machines without a GPU. X11/AT-SPI tests skip without a displ
 | 5 | X11 input injection + AT-SPI accessibility tree | Done |
 | 6 | NCCL coordination — rank negotiation, UniqueId exchange, allreduce/broadcast | Done |
 | 7 | Container/namespace isolation, cgroup v2 resource control | Done |
+| 8 | Browser control — Chromium as agent process, CDP WebSocket (stdlib), headless + non-headless, React form fill | Done |
 
 ---
 
@@ -192,3 +193,6 @@ CUDA tests skip on machines without a GPU. X11/AT-SPI tests skip without a displ
 | List running containers with GPU assignment | `list_containers()` / `gpu_containers()` (Phase 7) |
 | Read cgroup v2 resource limits for any process | `cgroup_info(pid)` (Phase 7) |
 | Verify container identity across restarts | `container_identity(name)` (Phase 7) |
+| Spawn a headless browser + drive via CDP | `BrowserSession()` (Phase 8) |
+| Drive a visible browser (non-headless) | `BrowserSession(headless=False)` on DISPLAY=:1 (Phase 8) |
+| Fill React controlled inputs | native `HTMLInputElement.prototype` setter + dispatch `input`/`change` (Phase 8) |
