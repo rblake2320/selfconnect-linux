@@ -125,18 +125,18 @@ Expected: 34 passed, 2 skipped (tmux-absent guard paths).
 
 ---
 
-## Phase map and what's next
+## Phase map (v0.4.0)
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Platform split — no Win32 imports on Linux | Done |
-| 1 | PTY agent lane, identity, receipts, tmux adapter | Done |
-| 2 | AF_UNIX broker — SO_PEERCRED, /proc leases | broker.py skeleton exists |
-| 3 | memfd/eventfd/epoll IPC bus | Not started |
-| 4 | CUDA IPC, NCCL metadata, GPU buffer receipts | Not started |
+| 0 | Platform split — no Win32 imports on Linux | **Done** |
+| 1 | PTY agent lane, identity, receipts, tmux adapter | **Done** |
+| 2 | AF_UNIX broker — SO_PEERCRED, /proc leases, messaging | **Done** (`broker.py`) |
+| 3 | memfd/eventfd zero-copy IPC bus | **Done** (`shm.py`) |
+| 4 | CUDA IPC — zero-copy GPU buffer sharing, tested on GB10 | **Done** (`cuda_ipc.py`) |
 | 5 | AT-SPI, X11, Wayland portals, PipeWire | Not started |
 
-When implementing Phase 2, read `broker.py` first — the socket path, SO_PEERCRED call, and connection handler are already in place. Phase 2 adds lease issuance on top of that skeleton.
+92 tests pass, 2 skip (tmux-absent guard paths). All tests run without root, GUI, or CUDA.
 
 ---
 
@@ -147,10 +147,10 @@ When implementing Phase 2, read `broker.py` first — the socket path, SO_PEERCR
 | Spawn agent and control its stdin/stdout | `spawn_pty_agent()` → PTY master |
 | Make agent session persistent + human-visible | `tmux_agent.new_session()` |
 | Verify target is the same process before acting | `capture_identity()` + `verify_identity()` |
-| Fast local agent-to-agent bus | AF_UNIX + memfd + eventfd (Phase 3) |
-| Credential-verified IPC | AF_UNIX + SO_PEERCRED (Phase 2) |
-| Share GPU tensor between agents | CUDA IPC (Phase 4) |
-| Semantic GUI tree access | AT-SPI2 / D-Bus (Phase 5) |
-| Screen capture on X11 | XComposite / XShm (Phase 5) |
-| Screen capture on Wayland | PipeWire ScreenCast portal (Phase 5) |
-| Synthetic keyboard input | XTEST (X11) / uinput fallback (Phase 5) |
+| OS-verified agent-to-agent identity | `BrokerClient` + AF_UNIX `SO_PEERCRED` (`broker.py`) |
+| Fast zero-copy agent-to-agent payload | `MemfdChannel` + `EventfdChannel` (`shm.py`) |
+| Share GPU tensor between agents, zero CPU copy | `CudaIpcBuffer` + CUDA IPC handle (`cuda_ipc.py`) |
+| Semantic GUI tree access | AT-SPI2 / D-Bus (Phase 5 — not started) |
+| Screen capture on X11 | XComposite / XShm (Phase 5 — not started) |
+| Screen capture on Wayland | PipeWire ScreenCast portal (Phase 5 — not started) |
+| Synthetic keyboard input | XTEST (X11) / uinput fallback (Phase 5 — not started) |
