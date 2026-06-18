@@ -206,6 +206,10 @@ _VERIFY_FIELDS = [
     "gpu_uuid",
 ]
 
+# Fields that are core anti-spoofing guards — if None in expected, verification
+# cannot proceed safely and must fail closed rather than skip the check.
+_REQUIRED_FIELDS = frozenset({"proc_start_time_ticks"})
+
 
 class LinuxTargetMismatch(RuntimeError):
     pass
@@ -215,7 +219,16 @@ def verify_identity(expected: LinuxTargetIdentity, observed: LinuxTargetIdentity
     """
     Fail closed: raise LinuxTargetMismatch if any non-None expected field
     doesn't match the observed snapshot.
+
+    For fields in _REQUIRED_FIELDS (core anti-PID-reuse guards), a None value
+    in expected is itself a failure — unknown expected state is not safe.
     """
+    for f in _REQUIRED_FIELDS:
+        if getattr(expected, f) is None:
+            raise LinuxTargetMismatch(
+                f"Cannot verify identity: {f!r} is None in expected snapshot "
+                f"— was the process unreadable at capture time?"
+            )
     failures = {
         f: {"expected": getattr(expected, f), "observed": getattr(observed, f)}
         for f in _VERIFY_FIELDS

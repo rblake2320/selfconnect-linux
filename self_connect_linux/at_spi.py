@@ -10,32 +10,42 @@ on Ubuntu 24.04 but is NOT available in Miniconda Python.  This module bridges
 the gap by running queries through /usr/bin/python3 via subprocess.  The caller's
 API is clean; the gi dependency is isolated in the subprocess.
 
-Capability gate: call at_spi_available() before any query.
+Security: parameters are NEVER interpolated into subprocess code strings.  They
+are passed as JSON via stdin and read inside the subprocess as _P["key"].  This
+prevents code injection regardless of the parameter values.
 
-Key operations:
-  list_applications()              → list of app names visible to AT-SPI
-  find_application(name)           → first app whose name matches (substring)
-  get_text(app_name, role, label)  → read text from a widget
-  activate(app_name, role, label)  → click/invoke a widget
-  get_focused_text()               → text of the currently focused widget
+Capability gate: call at_spi_available() before any query.
 """
 from __future__ import annotations
 
 import json
 import os
 import subprocess
-import sys
 from typing import Any
 
 _SYSTEM_PYTHON = "/usr/bin/python3"
 
-# AT-SPI query bootstrap — injected into every subprocess call
+# Environment keys forwarded to AT-SPI subprocess — nothing else, no secrets.
+_ENV_KEYS = (
+    "DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR",
+    "HOME", "USER", "PATH", "XAUTHORITY",
+)
+
+
+def _minimal_env() -> dict[str, str]:
+    return {k: v for k in _ENV_KEYS if (v := os.environ.get(k)) is not None}
+
+
+# AT-SPI query bootstrap — injected into every subprocess call.
+# Parameters arrive from stdin as JSON: _P = json.load(sys.stdin).
+# Nothing from the caller is interpolated into this code string.
 _ATSPI_BOOTSTRAP = """
 import gi, json, sys
 gi.require_version('Atspi', '2.0')
 from gi.repository import Atspi
 Atspi.init()
 desktop = Atspi.get_desktop(0)
+_P = json.load(sys.stdin)
 
 def iter_apps():
     for i in range(desktop.get_child_count()):
@@ -71,15 +81,16 @@ def node_info(n):
 """
 
 
-def _run(code: str, timeout: int = 10) -> Any:
-    """Run AT-SPI query via system Python, return parsed JSON output."""
+def _run(code: str, params: dict | None = None, timeout: int = 10) -> Any:
+    """Run AT-SPI query via system Python with params passed through stdin."""
     full = _ATSPI_BOOTSTRAP + "\n" + code
+    input_data = json.dumps(params or {}).encode()
     result = subprocess.run(
         [_SYSTEM_PYTHON, "-c", full],
+        input=input_data,
         capture_output=True,
-        text=True,
         timeout=timeout,
-        env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":1")},
+        env=_minimal_env(),
     )
     if result.returncode != 0:
         raise RuntimeError(f"AT-SPI query failed: {result.stderr.strip()[:400]}")
@@ -99,7 +110,7 @@ def at_spi_available() -> bool:
              "from gi.repository import Atspi; Atspi.init(); "
              "print('ok')"],
             capture_output=True, text=True, timeout=5,
-            env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":1")},
+            env=_minimal_env(),
         )
         return result.returncode == 0 and "ok" in result.stdout
     except Exception:
@@ -136,19 +147,20 @@ def get_application_widgets(app_name: str, max_depth: int = 6) -> list[dict]:
     Return a flat list of widget info dicts for all nodes in *app_name*'s tree.
     Each dict has keys: name, role, text.
     """
-    code = f"""
-target = next((a for a in iter_apps() if {app_name!r}.lower() in (a.get_name() or '').lower()), None)
+    if not isinstance(max_depth, int) or max_depth < 0:
+        raise ValueError("max_depth must be a non-negative integer")
+    return _run("""
+target = next((a for a in iter_apps() if _P["app_name"].lower() in (a.get_name() or '').lower()), None)
 if target is None:
     print(json.dumps([]))
 else:
     nodes = [node_info(target)]
-    for child in iter_children(target, {max_depth}):
+    for child in iter_children(target, _P["max_depth"]):
         info = node_info(child)
         if info:
             nodes.append(info)
     print(json.dumps([n for n in nodes if n]))
-"""
-    return _run(code)
+""", {"app_name": app_name, "max_depth": max_depth})
 
 
 def get_text(app_name: str, role: str | None = None, label: str | None = None) -> str:
@@ -178,14 +190,14 @@ def activate(app_name: str, role: str | None = None, label: str | None = None) -
 
     Returns True if a matching widget was found and activated.
     """
-    code = f"""
-target = next((a for a in iter_apps() if {app_name!r}.lower() in (a.get_name() or '').lower()), None)
+    return _run("""
+target = next((a for a in iter_apps() if _P["app_name"].lower() in (a.get_name() or '').lower()), None)
 found = False
 if target:
     for child in iter_children(target, 8):
         try:
-            role_ok = not {role!r} or ({role!r}.lower() in (child.get_role_name() or '').lower())
-            name_ok = not {label!r} or ({label!r}.lower() in (child.get_name() or '').lower())
+            role_ok = not _P["role"] or (_P["role"].lower() in (child.get_role_name() or '').lower())
+            name_ok = not _P["label"] or (_P["label"].lower() in (child.get_name() or '').lower())
             if role_ok and name_ok:
                 action = child.query_action()
                 if action and action.get_n_actions() > 0:
@@ -195,15 +207,12 @@ if target:
         except Exception:
             continue
 print(json.dumps(found))
-"""
-    return _run(code)
+""", {"app_name": app_name, "role": role, "label": label})
 
 
 def get_focused_text() -> str:
     """Return the text of the currently keyboard-focused widget, or empty string."""
     return _run("""
-focused = Atspi.get_desktop(0)
-# Walk to find focused node
 result = ''
 for app in iter_apps():
     for child in iter_children(app, 8):

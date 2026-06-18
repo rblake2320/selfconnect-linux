@@ -28,12 +28,14 @@ Example (single process):
     ch.close()
 
 Example (two processes via FD passing):
-    # Producer
+    # Producer — MUST write + seal BEFORE sending the FD.  Sending an unsealed
+    # memfd lets the receiver map it writable before the seal is applied (TOCTOU).
     ch = MemfdChannel.create(size=1024 * 1024)
     sig = EventfdChannel.create()
     sender_sock, _ = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
-    send_fds(sender_sock, [ch.fd, sig.fd])
-    ch.write(b"payload")
+    ch.write(b"payload")   # 1. write
+    ch.seal()              # 2. seal — now the fd is read-only for all future mappers
+    send_fds(sender_sock, [ch.fd, sig.fd])  # 3. send (sealed, safe)
     sig.signal()
 
     # Consumer (receives FDs from the other end of socketpair)

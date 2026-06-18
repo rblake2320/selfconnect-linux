@@ -68,10 +68,10 @@ def main() -> bool:
         print("SKIP: no CUDA GPU available on this host")
         return True
 
+    import os, shutil
     repo_root = str(Path(__file__).parent.parent)
-    sock_path = tempfile.mktemp(suffix="_cuda_demo.sock")
-
-    import os
+    _tmpdir = tempfile.mkdtemp()
+    sock_path = os.path.join(_tmpdir, "broker.sock")
     with BrokerServer(socket_path=sock_path) as broker:
         time.sleep(0.05)
 
@@ -113,10 +113,7 @@ def main() -> bool:
         stdout = proc.stdout.read()
         stderr = proc.stderr.read()
 
-    try:
-        os.unlink(sock_path)
-    except FileNotFoundError:
-        pass  # BrokerServer.stop() already removed it
+    shutil.rmtree(_tmpdir, ignore_errors=True)
 
     if not reply:
         print("FAIL: no reply from consumer")

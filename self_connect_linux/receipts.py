@@ -24,7 +24,7 @@ class ActionReceipt:
 def _hash(data: bytes | str) -> str:
     if isinstance(data, str):
         data = data.encode()
-    return "sha256:" + hashlib.sha256(data).hexdigest()[:16]
+    return "sha256:" + hashlib.sha256(data).hexdigest()  # full 64-char hash — no truncation
 
 
 def make_receipt(

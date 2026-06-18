@@ -58,6 +58,7 @@ from .provenance import ProvenanceLedger
 
 LEASE_TTL_SECONDS = 60
 _MAX_MAILBOX = 256
+_MAX_MSG_BYTES = 1 * 1024 * 1024  # 1 MiB per message; excess closes the connection
 
 
 def default_socket_path() -> str:
@@ -67,8 +68,9 @@ def default_socket_path() -> str:
 
 
 def _peer_cred(conn: socket.socket) -> dict[str, int]:
-    raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3I"))
-    pid, uid, gid = struct.unpack("3I", raw)
+    # "=3I": explicit standard sizes, little-endian — matches struct ucred {u32,u32,u32}
+    raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("=3I"))
+    pid, uid, gid = struct.unpack("=3I", raw)
     return {"pid": pid, "uid": uid, "gid": gid}
 
 
@@ -78,6 +80,8 @@ def _send_json(conn: socket.socket, msg: dict[str, Any]) -> None:
 
 def _recv_json(conn: socket.socket, buf: bytearray) -> dict[str, Any] | None:
     while b"\n" not in buf:
+        if len(buf) > _MAX_MSG_BYTES:
+            raise ValueError(f"message exceeds {_MAX_MSG_BYTES} bytes without newline — connection closed")
         chunk = conn.recv(4096)
         if not chunk:
             return None
@@ -126,7 +130,8 @@ class BrokerServer:
         self._lock = threading.Lock()
         self._leases: dict[str, _Lease] = {}          # lease_id → _Lease
         self._agents: dict[str, str] = {}              # agent_id → lease_id
-        self._mailboxes: dict[str, deque] = defaultdict(lambda: deque(maxlen=_MAX_MAILBOX))
+        # No implicit maxlen — insertions are guarded; full mailbox returns an error to sender
+        self._mailboxes: dict[str, deque] = defaultdict(deque)
         # GPU handle grants: handle_id → grant_info dict
         self._grants: dict[str, dict] = {}
         # Tamper-evident provenance ledger for all GPU buffer transfers
@@ -203,9 +208,17 @@ class BrokerServer:
 
                 lease = _Lease(agent_id, cred, identity)
                 with self._lock:
-                    # Evict any existing lease for this agent_id
+                    # Bind agent_id to the connecting PID — prevents spoofing by a different process
                     old_lid = self._agents.get(agent_id)
                     if old_lid and old_lid in self._leases:
+                        old_lease = self._leases[old_lid]
+                        if old_lease.peer_cred["pid"] != cred["pid"]:
+                            _send_json(conn, {"type": "error", "error": (
+                                f"agent_id {agent_id!r} already held by pid "
+                                f"{old_lease.peer_cred['pid']}"
+                            )})
+                            return
+                        # Same PID reconnecting — evict stale lease
                         del self._leases[old_lid]
                     self._leases[lease.lease_id] = lease
                     self._agents[agent_id] = lease.lease_id
@@ -226,10 +239,10 @@ class BrokerServer:
                     mtype = msg.get("type")
                     lid = msg.get("lease", "")
 
-                    with self._lock:
-                        valid = lid in self._leases and self._leases[lid].is_valid()
-                        if valid:
-                            self._leases[lid].renew()
+                    # Validate against THIS connection's lease only — prevents lease borrowing
+                    valid = lid == lease.lease_id and lease.is_valid()
+                    if valid:
+                        lease.renew()
 
                     if not valid:
                         _send_json(conn, {"type": "error", "error": "invalid or expired lease"})
@@ -238,9 +251,15 @@ class BrokerServer:
                     if mtype == "send":
                         to = str(msg.get("to", ""))
                         payload = msg.get("payload", "")
-                        rid = str(uuid.uuid4())
                         with self._lock:
-                            self._mailboxes[to].append({
+                            mb = self._mailboxes[to]
+                            if len(mb) >= _MAX_MAILBOX:
+                                _send_json(conn, {"type": "error", "error": (
+                                    f"mailbox for {to!r} is full ({_MAX_MAILBOX} messages) — message not delivered"
+                                )})
+                                continue
+                            rid = str(uuid.uuid4())
+                            mb.append({
                                 "from": agent_id,
                                 "payload": payload,
                                 "receipt_id": rid,

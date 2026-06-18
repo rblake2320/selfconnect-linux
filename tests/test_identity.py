@@ -65,12 +65,22 @@ def test_verify_identity_fails_on_pid_mismatch():
         verify_identity(a, b)
 
 
-def test_verify_identity_ignores_none_fields():
-    """Fields that are None on expected side should not cause mismatch."""
-    from self_connect_linux.identity import LinuxTargetIdentity, verify_identity
-    a = LinuxTargetIdentity(pid=100, exe_path=None)   # exe_path None = don't check
-    b = LinuxTargetIdentity(pid=100, exe_path="/usr/bin/python3")
+def test_verify_identity_ignores_none_optional_fields():
+    """Optional fields that are None in expected are skipped — don't check what we don't know."""
+    from self_connect_linux.identity import LinuxTargetIdentity, verify_identity, LinuxTargetMismatch
+    # exe_path=None means "don't check" — observed value irrelevant
+    a = LinuxTargetIdentity(pid=100, proc_start_time_ticks=999, exe_path=None)
+    b = LinuxTargetIdentity(pid=100, proc_start_time_ticks=999, exe_path="/usr/bin/python3")
     verify_identity(a, b)  # should not raise
+
+
+def test_verify_identity_required_none_fails_closed():
+    """proc_start_time_ticks=None in expected must raise — unverifiable anti-spoofing field."""
+    from self_connect_linux.identity import LinuxTargetIdentity, verify_identity, LinuxTargetMismatch
+    a = LinuxTargetIdentity(pid=100, proc_start_time_ticks=None)
+    b = LinuxTargetIdentity(pid=100, proc_start_time_ticks=12345)
+    with pytest.raises(LinuxTargetMismatch, match="proc_start_time_ticks"):
+        verify_identity(a, b)
 
 
 def test_identity_is_frozen():

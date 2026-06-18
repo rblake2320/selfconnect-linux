@@ -62,8 +62,9 @@ def worker_loop(name: str, bash_agent, broker_sock: str, results: list, lock: th
 
 
 def main():
-    import tempfile, os
-    sock_path = tempfile.mktemp(suffix=".sock")
+    import tempfile, os, shutil
+    _tmpdir = tempfile.mkdtemp()
+    sock_path = os.path.join(_tmpdir, "broker.sock")
 
     with BrokerServer(socket_path=sock_path) as broker:
         time.sleep(0.05)  # let accept loop start
@@ -125,10 +126,7 @@ def main():
         for r in results:
             print(f"  {r['worker']}: {r['result']}  [{r['receipt_id'][:8]}]")
 
-    try:
-        os.unlink(sock_path)
-    except FileNotFoundError:
-        pass  # BrokerServer.stop() already removed it
+    shutil.rmtree(_tmpdir, ignore_errors=True)
     return len(collected) == len(TASKS)
 
 

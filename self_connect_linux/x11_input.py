@@ -298,6 +298,14 @@ def type_text(window_id: int, text: str, delay_ms: float = 10.0) -> None:
     focus_window(window_id)
     delay = delay_ms / 1000.0
     for ch in text:
+        # Re-verify focus before each character — XTEST injects into the current
+        # X focus target, not into window_id directly.  If focus shifted (e.g. a
+        # notification popup), restore it rather than typing into the wrong window.
+        try:
+            if d.get_input_focus().focus.id != window_id:
+                focus_window(window_id)
+        except Exception:
+            pass
         if ch == "\n":
             send_key(window_id, "Return")
         elif ch == "\t":
