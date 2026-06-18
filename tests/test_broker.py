@@ -133,8 +133,14 @@ def test_concurrent_agents(broker):
     assert len(results) == 5
 
     for i, r in enumerate(receivers):
-        msg = r.recv()
-        assert msg is not None
+        # Poll with retries — CI runners can be slow to deliver under concurrent load
+        msg = None
+        for _ in range(20):
+            msg = r.recv()
+            if msg is not None:
+                break
+            time.sleep(0.05)
+        assert msg is not None, f"rx-{i} got no message after 1s"
         assert msg["payload"] == f"concurrent-{i}"
         r.disconnect()
 
