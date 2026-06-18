@@ -4,8 +4,10 @@ self_connect_linux — Linux-native SelfConnect agent control layer for DGX Spar
 Phase 0/1: PTY agent lane, AF_UNIX broker skeleton, /proc identity.
 Phase 2: AF_UNIX broker with SO_PEERCRED lease issuance + agent messaging.
 Phase 3: memfd/eventfd zero-copy IPC bus.
-Phase 4: CUDA IPC — zero-copy GPU buffer sharing across processes.
+Phase 4: CUDA IPC — zero-copy GPU buffer sharing across processes + provenance ledger.
 Phase 5: X11 input injection + AT-SPI accessibility tree.
+Phase 6: NCCL coordination — rank negotiation, UniqueId exchange, allreduce/broadcast.
+Phase 7: Container/namespace isolation, cgroup v2 resource control.
 
 This package does not import any Win32 module and is safe to import on
 Linux/DGX (Ubuntu 24.04, aarch64, NVIDIA GB10).
@@ -58,16 +60,36 @@ from .at_spi import (
     get_focused_text,
 )
 from .provenance import (
-    ProvenanceLedger,
     ChainedReceipt,
+    ProvenanceLedger,
     make_chained_receipt,
     ChainBroken,
     GENESIS_HASH,
 )
+from .container import (
+    ContainerInfo,
+    CgroupInfo,
+    container_available,
+    list_containers,
+    gpu_containers,
+    cgroup_info,
+    container_identity,
+)
+from .nccl import (
+    nccl_available,
+    generate_unique_id,
+    get_build_version as nccl_build_version,
+    get_runtime_version as nccl_runtime_version,
+    nccl_rank_negotiate,
+    NcclComm,
+)
 from . import tmux_agent
 from . import at_spi
+from . import provenance
+from . import container
+from . import nccl
 
-__version__ = "0.6.0"
+__version__ = "0.8.0"
 __all__ = [
     # Identity
     "LinuxTargetIdentity",
@@ -119,12 +141,30 @@ __all__ = [
     "at_spi_activate",
     "get_focused_text",
     "at_spi",
-    # Provenance — hash-chained ledger with tamper detection
-    "ProvenanceLedger",
+    # Phase 4 provenance — hash-chained GPU transfer audit trail
     "ChainedReceipt",
+    "ProvenanceLedger",
     "make_chained_receipt",
     "ChainBroken",
     "GENESIS_HASH",
+    "provenance",
+    # Phase 6 — NCCL coordination (gated on nccl_available())
+    "nccl_available",
+    "generate_unique_id",
+    "nccl_build_version",
+    "nccl_runtime_version",
+    "nccl_rank_negotiate",
+    "NcclComm",
+    "nccl",
+    # Phase 7 — Container/namespace isolation (gated on container_available())
+    "ContainerInfo",
+    "CgroupInfo",
+    "container_available",
+    "list_containers",
+    "gpu_containers",
+    "cgroup_info",
+    "container_identity",
+    "container",
     # Optional tmux adapter (check tmux_agent.is_available() before use)
     "tmux_agent",
 ]

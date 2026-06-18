@@ -104,6 +104,9 @@ self_connect_linux/
   cuda_ipc.py     CudaIpcBuffer, handle_to_b64/from_b64 (Phase 4)
   x11_input.py    Window discovery + XTEST keyboard/mouse injection (Phase 5)
   at_spi.py       AT-SPI accessibility tree access via subprocess bridge (Phase 5)
+  provenance.py   Hash-chained GPU transfer audit trail (Phase 4 extension)
+  nccl.py         NCCL rank negotiation + NcclComm wrapper (Phase 6)
+  container.py    Docker container info, cgroup v2 limits, container identity (Phase 7)
   tests/          All tests — no GUI, no root needed
 examples/
   two_agent_task.py           PTY workers + broker coordination
@@ -140,6 +143,9 @@ python -m pytest tests/test_shm.py -v                # Phase 3
 python -m pytest tests/test_cuda_ipc.py -v           # Phase 4 (needs GPU)
 python -m pytest tests/test_x11_input.py -v          # Phase 5 (needs DISPLAY)
 python -m pytest tests/test_at_spi.py -v             # Phase 5 (needs AT-SPI)
+python -m pytest tests/test_provenance.py -v         # Phase 4 provenance
+python -m pytest tests/test_nccl.py -v               # Phase 6 (needs CUDA + NCCL)
+python -m pytest tests/test_container.py -v          # Phase 7 (needs Docker)
 
 # With coverage
 python -m pytest tests/ --cov=self_connect_linux --cov-report=term-missing
@@ -158,10 +164,10 @@ CUDA tests skip on machines without a GPU. X11/AT-SPI tests skip without a displ
 | 1 | PTY agent lane, identity, receipts, tmux adapter | Done |
 | 2 | AF/UNIX broker — SO_PEERCRED, /proc leases, agent mailbox | Done |
 | 3 | memfd/eventfd zero-copy IPC bus + FD passing | Done |
-| 4 | CUDA IPC — cross-process GPU buffer sharing | Done |
+| 4 | CUDA IPC — cross-process GPU buffer sharing + hash-chained provenance ledger | Done |
 | 5 | X11 input injection + AT-SPI accessibility tree | Done |
-| 6 | NCCL metadata, multi-GPU coordination | Not started |
-| 7 | Container/namespace isolation, cgroup control | Not started |
+| 6 | NCCL coordination — rank negotiation, UniqueId exchange, allreduce/broadcast | Done |
+| 7 | Container/namespace isolation, cgroup v2 resource control | Done |
 
 ---
 
@@ -181,3 +187,8 @@ CUDA tests skip on machines without a GPU. X11/AT-SPI tests skip without a displ
 | Type text into a GUI application | `type_text()` (Phase 5) |
 | Read GUI widget content via accessibility tree | `at_spi.get_text()` (Phase 5) |
 | Credential-verified IPC lease | AF_UNIX + SO_PEERCRED (Phase 2) |
+| Tamper-evident GPU transfer audit trail | `ProvenanceLedger` + `verify_chain()` (Phase 4) |
+| NCCL rank coordination across agents | `nccl_rank_negotiate()` + `NcclComm` (Phase 6) |
+| List running containers with GPU assignment | `list_containers()` / `gpu_containers()` (Phase 7) |
+| Read cgroup v2 resource limits for any process | `cgroup_info(pid)` (Phase 7) |
+| Verify container identity across restarts | `container_identity(name)` (Phase 7) |
