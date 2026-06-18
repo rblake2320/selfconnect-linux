@@ -175,7 +175,7 @@ def _cuda_context_id() -> str | None:
 def capture_identity(pid: int, backend: str = "pty") -> LinuxTargetIdentity:
     """Build a /proc-based identity snapshot for a PID. Read-only, no side effects."""
     exe = _exe_path(pid)
-    gpu = _gpu_uuid() if pid == os.getpid() else None
+    gpu = _gpu_uuid()  # GPU UUID is a system property; valid for any PID on same host
     ctx = _cuda_context_id() if pid == os.getpid() else None
     return LinuxTargetIdentity(
         platform="linux",

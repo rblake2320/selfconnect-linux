@@ -50,26 +50,27 @@ with BrokerServer(socket_path=sock_path) as srv:
 """
 
 AGENT_A_SCRIPT = """
-import sys, json, time, os
-import cupy
-import cupy.cuda.runtime as rt
+import sys, json, time, os, struct, hashlib
 from self_connect_linux.broker import BrokerClient
-from self_connect_linux.cuda_ipc import export_handle, gpu_buffer_fingerprint_arr
+from self_connect_linux.cuda_ipc import CudaIpcBuffer
 
 sock_path = sys.argv[1]
 result_file = sys.argv[2]
 n_elements = int(sys.argv[3])
 
-# Allocate GPU tensor with known values
-arr = cupy.arange(n_elements, dtype=cupy.float32) * 10.0
-rt.deviceSynchronize()
+# Allocate GPU buffer with known float32 values (0.0, 10.0, 20.0, ...)
+size_bytes = n_elements * 4  # float32
+initial_data = struct.pack(f"{n_elements}f", *[i * 10.0 for i in range(n_elements)])
+buf = CudaIpcBuffer.alloc(size_bytes)
+buf.write(initial_data)
 
-handle = export_handle(arr.data.ptr)
-fingerprint = gpu_buffer_fingerprint_arr(arr)
+handle = buf.export_handle()
+raw = buf.read()
+fingerprint = "sha256:" + hashlib.sha256(raw).hexdigest()
 
 with BrokerClient("agent-A", socket_path=sock_path) as c:
     # Deposit handle for agent-B to claim
-    resp = c.grant_gpu("agent-B", handle, arr.nbytes, buffer_fingerprint=fingerprint)
+    resp = c.grant_gpu("agent-B", handle, size_bytes, buffer_fingerprint=fingerprint)
     handle_id = resp["handle_id"]
     chain_hash_after_grant = resp["chain_hash"]
 
@@ -89,56 +90,52 @@ with BrokerClient("agent-A", socket_path=sock_path) as c:
         time.sleep(0.2)
 
     # Read back — should see agent-B's mutation (zero-copy: same physical memory)
-    rt.deviceSynchronize()
-    readback = arr.tolist()
+    readback_raw = buf.read()
+    readback = list(struct.unpack(f"{n_elements}f", readback_raw))
 
     with open(result_file, "w") as f:
         json.dump({
             "handle_id": handle_id,
             "chain_hash_after_grant": chain_hash_after_grant,
-            "original_values": list(range(n_elements)),
+            "original_values": [i * 10.0 for i in range(n_elements)],
             "readback_values": readback,
-            "mutation_visible": readback[0] == 999.0,
+            "mutation_visible": abs(readback[0] - 999.0) < 0.01,
             "phase": "done",
         }, f)
     # Keep buffer alive until broker is done
     time.sleep(2.0)
+    buf.close()
 """
 
 AGENT_B_SCRIPT = """
-import sys, json
-import cupy
-import cupy.cuda.runtime as rt
+import sys, json, struct, hashlib
 from self_connect_linux.broker import BrokerClient
-from self_connect_linux.cuda_ipc import make_view
+from self_connect_linux.cuda_ipc import CudaIpcBuffer
 
 sock_path = sys.argv[1]
 handle_id = sys.argv[2]
 result_file = sys.argv[3]
 n_elements = int(sys.argv[4])
+size_bytes = n_elements * 4
 
 with BrokerClient("agent-B", socket_path=sock_path) as c:
     # Claim the GPU handle — broker verifies our kernel identity first
     resp = c.claim_gpu(handle_id)
-    gpu_handle_bytes = resp["gpu_handle_bytes"]
     chain_hash_after_claim = resp["chain_hash"]
     fingerprint = resp["buffer_fingerprint"]
 
     # Map the exporter's GPU memory zero-copy via CUDA IPC
-    mapped_ptr = rt.ipcOpenMemHandle(
-        gpu_handle_bytes, rt.cudaIpcMemLazyEnablePeerAccess
-    )
-    arr_view = make_view(mapped_ptr, n_elements, dtype="float32")
+    buf = CudaIpcBuffer.from_handle(resp["gpu_handle_bytes"], size_bytes)
 
-    # Read initial values (should match agent-A's arange * 10)
-    rt.deviceSynchronize()
-    initial_values = arr_view.tolist()
+    # Read initial values (should match agent-A's i*10 pattern)
+    raw = buf.read()
+    initial_values = list(struct.unpack(f"{n_elements}f", raw))
 
     # MUTATION: write 999.0 into element [0] — agent-A will see this
-    arr_view[0] = 999.0
-    rt.deviceSynchronize()
-
-    rt.ipcCloseMemHandle(mapped_ptr)
+    mutated = list(initial_values)
+    mutated[0] = 999.0
+    buf.write(struct.pack(f"{n_elements}f", *mutated))
+    buf.close()
 
     with open(result_file, "w") as f:
         json.dump({

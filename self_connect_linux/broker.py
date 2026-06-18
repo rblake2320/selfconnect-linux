@@ -58,7 +58,8 @@ from .provenance import ProvenanceLedger
 
 LEASE_TTL_SECONDS = 60
 _MAX_MAILBOX = 256
-_MAX_MSG_BYTES = 1 * 1024 * 1024  # 1 MiB per message; excess closes the connection
+_MAX_MSG_BYTES = 256 * 1024  # 256 KB per message; excess closes the connection
+_MAX_HANDLERS = 256
 
 
 def default_socket_path() -> str:
@@ -81,7 +82,7 @@ def _send_json(conn: socket.socket, msg: dict[str, Any]) -> None:
 def _recv_json(conn: socket.socket, buf: bytearray) -> dict[str, Any] | None:
     while b"\n" not in buf:
         if len(buf) > _MAX_MSG_BYTES:
-            raise ValueError(f"message exceeds {_MAX_MSG_BYTES} bytes without newline — connection closed")
+            raise ValueError(f"message exceeds {_MAX_MSG_BYTES} bytes")
         chunk = conn.recv(4096)
         if not chunk:
             return None
@@ -128,6 +129,7 @@ class BrokerServer:
         self._thread: threading.Thread | None = None
         self._running = False
         self._lock = threading.Lock()
+        self._handler_sem = threading.Semaphore(_MAX_HANDLERS)
         self._leases: dict[str, _Lease] = {}          # lease_id → _Lease
         self._agents: dict[str, str] = {}              # agent_id → lease_id
         # No implicit maxlen — insertions are guarded; full mailbox returns an error to sender
@@ -175,9 +177,18 @@ class BrokerServer:
                 conn, _ = self._sock.accept()
             except OSError:
                 break
-            threading.Thread(
-                target=self._handle, args=(conn,), daemon=True, name="sc-broker-conn"
-            ).start()
+            if not self._handler_sem.acquire(blocking=False):
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+                continue
+            def _run(c=conn):
+                try:
+                    self._handle(c)
+                finally:
+                    self._handler_sem.release()
+            threading.Thread(target=_run, daemon=True, name="sc-broker-conn").start()
 
     def _handle(self, conn: socket.socket) -> None:
         buf = bytearray()
@@ -294,6 +305,13 @@ class BrokerServer:
                             continue
                         handle_id = str(uuid.uuid4())
                         with self._lock:
+                            # Capture recipient's identity at grant time (prevents impostor eviction attack)
+                            recipient_lid = self._agents.get(to)
+                            expected_claimer_identity = None
+                            if recipient_lid and recipient_lid in self._leases:
+                                rl = self._leases[recipient_lid]
+                                if rl.is_valid():
+                                    expected_claimer_identity = rl.identity
                             self._grants[handle_id] = {
                                 "from_agent": agent_id,
                                 "to_agent": to,
@@ -302,9 +320,9 @@ class BrokerServer:
                                 "buffer_fingerprint": buf_fp,
                                 "granter_identity": lease.identity,
                                 "granter_pid": cred["pid"],
+                                "expected_claimer_identity": expected_claimer_identity,
                             }
-                        # Record grant in provenance ledger
-                        with self._lock:
+                            # Record grant in provenance ledger (inside same lock to prevent race)
                             r = self.ledger.append(
                                 action="grant",
                                 from_agent=agent_id,
@@ -361,8 +379,11 @@ class BrokerServer:
                         # Re-attest: capture fresh /proc identity of claimer and verify
                         try:
                             fresh = capture_identity(cred["pid"])
-                            if lease.identity:
-                                verify_identity(lease.identity, fresh)
+                            # Prefer grant-time identity (blocks impostor eviction attack).
+                            # Fall back to hello-time identity (blocks mid-connection binary swap).
+                            expected = grant.get("expected_claimer_identity") or lease.identity
+                            if expected:
+                                verify_identity(expected, fresh)
                         except LinuxTargetMismatch as exc:
                             with self._lock:
                                 r = self.ledger.append(
@@ -421,7 +442,7 @@ class BrokerServer:
                     else:
                         _send_json(conn, {"type": "error", "error": f"unknown type: {mtype}"})
 
-            except (OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError, ValueError):
                 pass
             finally:
                 if lease:
