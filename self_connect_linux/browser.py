@@ -421,10 +421,18 @@ class BrowserSession:
 
     def fill(self, selector: str, value: str) -> ActionReceipt:
         try:
+            # Use the native HTMLInputElement value setter so React-controlled
+            # inputs register the change (direct .value= assignment is a no-op
+            # for React if the internal fiber value matches).
             js = (
                 f"(function(){{"
                 f"  var el = document.querySelector({json.dumps(selector)});"
-                f"  el.focus(); el.value = {json.dumps(value)};"
+                f"  if (!el) throw new Error('selector not found: {selector}');"
+                f"  el.focus();"
+                f"  var nativeSetter = Object.getOwnPropertyDescriptor("
+                f"      el.tagName === 'INPUT' ? window.HTMLInputElement.prototype"
+                f"      : window.HTMLTextAreaElement.prototype, 'value').set;"
+                f"  nativeSetter.call(el, {json.dumps(value)});"
                 f"  el.dispatchEvent(new Event('input', {{bubbles:true}}));"
                 f"  el.dispatchEvent(new Event('change', {{bubbles:true}}));"
                 f"}})()"
